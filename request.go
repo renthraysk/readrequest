@@ -146,9 +146,11 @@ func (b *Builder) Close(header http.Header) bool {
 
 func ContentLength(header http.Header) (int64, error) {
 	if v, ok := header["Content-Length"]; ok && len(v) > 0 {
-		if i, err := strconv.ParseInt(v[0], 10, 64); err == nil {
-			return i, nil
+		i, err := strconv.ParseInt(v[0], 10, 64)
+		if err != nil {
+			i = -1
 		}
+		return i, err
 	}
 	return -1, nil
 }
