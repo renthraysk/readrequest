@@ -9,8 +9,7 @@ type parser struct {
 	transform   func([]byte, int) int
 }
 
-// fn returns
-// return values as follows
+// fn return values
 // - next
 // the next parsing routine to call either a new state or a resumption of previous that run out of bytes
 // - pos
@@ -25,46 +24,35 @@ func (p *parser) parseMethod(buf []byte, pos int) (fn, int, int, error) {
 	for pos < len(buf) && isToken(buf[pos]) {
 		pos++
 	}
-	if pos >= len(buf) {
-		return (*parser).parseMethod, pos, pos, nil
+	if adv := pos + len(" / HTTP/0.0\r\n"); adv >= len(buf) {
+		return (*parser).parseMethod, pos, adv, nil
 	}
 	if buf[pos] != ' ' {
 		return nil, pos, 0, ErrExpectedSpace
 	}
 	pos++
-	return (*parser).parseRequestURI, pos, pos, nil
-}
-
-func (p *parser) parseRequestURI(buf []byte, pos int) (fn, int, int, error) {
 	if !isFieldVChar(buf[pos]) {
 		return nil, pos, 0, ErrMissingRequestURI
 	}
 	p.requestURI = pos
 	pos++
-	return (*parser).parseRequestURI2, pos, pos, nil
+	return (*parser).parseRequestURI, pos, pos, nil
 }
 
-func (p *parser) parseRequestURI2(buf []byte, pos int) (fn, int, int, error) {
+func (p *parser) parseRequestURI(buf []byte, pos int) (fn, int, int, error) {
 	for pos < len(buf) && isFieldVChar(buf[pos]) {
 		pos++
 	}
-	if pos >= len(buf) {
-		return (*parser).parseRequestURI2, pos, pos, nil
+	const prefix = "HTTP/"
+	const pattern = prefix + "0.0\r\n"
+
+	if adv := pos + len(" "+pattern); adv >= len(buf) {
+		return (*parser).parseRequestURI, pos, adv, nil
 	}
 	if buf[pos] != ' ' {
 		return nil, pos, 0, ErrExpectedSpace
 	}
 	pos++
-	return (*parser).parseProtocol, pos, pos, nil
-}
-
-func (p *parser) parseProtocol(buf []byte, pos int) (fn, int, int, error) {
-	const prefix = "HTTP/"
-	const pattern = prefix + "0.0\r\n"
-
-	if adv := pos + len(pattern); adv > len(buf) {
-		return (*parser).parseProtocol, pos, adv, nil
-	}
 	if string(buf[pos:pos+len(prefix)]) != prefix {
 		return nil, pos, 0, ErrUnknownProtocol
 	}
@@ -203,9 +191,9 @@ func (p *parser) ows1(buf []byte, pos int) (fn, int, int, error) {
 		return nil, pos, 0, ErrExpectedCarriageReturn
 	}
 	pos++
-	if buf[pos] == '\n' {
-		pos++
-		return (*parser).newline, pos, pos, nil
+	if buf[pos] != '\n' {
+		return nil, pos, 0, ErrExpectedNewline
 	}
-	return nil, pos, 0, ErrExpectedNewline
+	pos++
+	return (*parser).newline, pos, pos, nil
 }
