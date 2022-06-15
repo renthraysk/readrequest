@@ -63,7 +63,8 @@ func New(r *bufio.Reader) (*Builder, error) {
 		return nil, err
 	}
 	defer r.Discard(pos)
-	return &Builder{s: string(buf[:pos-len("\r\n")]),
+	return &Builder{
+		s:           string(buf[:pos-len("\r\n")]),
 		requestURI:  p.requestURI,
 		protocol:    p.protocol,
 		headers:     p.headers,
