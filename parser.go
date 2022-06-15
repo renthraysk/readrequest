@@ -43,32 +43,34 @@ func (p *parser) parseRequestURI(buf []byte, pos int) (fn, int, int, error) {
 	for pos < len(buf) && isFieldVChar(buf[pos]) {
 		pos++
 	}
-	const prefix = "HTTP/"
-	const pattern = prefix + "0.0\r\n"
-
-	if adv := pos + len(" "+pattern); adv >= len(buf) {
+	if adv := pos + len(" HTTP/0.0\r\n"); adv >= len(buf) {
 		return (*parser).parseRequestURI, pos, adv, nil
 	}
+	// Space between RequestURI and Protocol
 	if buf[pos] != ' ' {
 		return nil, pos, 0, ErrExpectedSpace
 	}
 	pos++
-	if string(buf[pos:pos+len(prefix)]) != prefix {
-		return nil, pos, 0, ErrUnknownProtocol
-	}
-	if !isDigit(buf[pos+len(prefix)]) ||
-		buf[pos+len(prefix+"0")] != '.' ||
-		!isDigit(buf[pos+len(prefix+"0.")]) {
-		return nil, pos, 0, ErrUnknownProtocol
-	}
+	// Protocol
 	p.protocol = pos
-	if buf[pos+len(prefix+"0.0")] != '\r' {
+	if string(buf[pos:pos+len("HTTP/")]) != "HTTP/" {
+		return nil, pos, 0, ErrUnknownProtocol
+	}
+	pos += len("HTTP/")
+	if !isDigit(buf[pos]) ||
+		buf[pos+len("0")] != '.' ||
+		!isDigit(buf[pos+len("0.")]) {
+		return nil, pos, 0, ErrUnknownProtocol
+	}
+	pos += len("0.0")
+	if buf[pos] != '\r' {
 		return nil, pos, 0, ErrExpectedCarriageReturn
 	}
-	if buf[pos+len(prefix+"0.0\r")] != '\n' {
+	pos++
+	if buf[pos] != '\n' {
 		return nil, pos, 0, ErrExpectedNewline
 	}
-	pos += len(pattern)
+	pos++
 	p.headers = pos
 	return (*parser).newline, pos, pos, nil
 }
@@ -109,15 +111,6 @@ func lower(buf []byte, pos int) int {
 	for ; pos < len(buf) && isFieldVChar(buf[pos]); pos++ {
 		if isUpper(buf[pos]) {
 			buf[pos] += 'a' - 'A'
-		}
-	}
-	return pos
-}
-
-func upper(buf []byte, pos int) int {
-	for ; pos < len(buf) && isFieldVChar(buf[pos]); pos++ {
-		if isLower(buf[pos]) {
-			buf[pos] -= 'a' - 'A'
 		}
 	}
 	return pos
@@ -166,18 +159,20 @@ func (p *parser) ows(buf []byte, pos int) (fn, int, int, error) {
 	if pos >= len(buf) {
 		return (*parser).ows, pos, pos, nil
 	}
+	// Header value
+	if !isFieldVChar(buf[pos]) {
+		return nil, pos, 0, ErrMissingHeaderValue
+	}
 	return (*parser).value, pos, pos, nil
 }
 
 func (p *parser) value(buf []byte, pos int) (fn, int, int, error) {
-	if !isFieldVChar(buf[pos]) {
-		return nil, pos, 0, ErrMissingHeaderValue
-	}
 	pos = p.transform(buf, pos)
+	next := (*parser).ows1
 	if pos >= len(buf) {
-		return (*parser).value, pos, pos, nil
+		next = (*parser).value
 	}
-	return (*parser).ows1, pos, pos, nil
+	return next, pos, pos, nil
 }
 
 func (p *parser) ows1(buf []byte, pos int) (fn, int, int, error) {
