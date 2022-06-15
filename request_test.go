@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -65,15 +66,19 @@ func TestQuickReadRequest(t *testing.T) {
 	assertEqual(t, "Host", r.Host, "www.techcrunch.com")
 	assertEqual(t, "Close", r.Close, false)
 	assertAnyEqual(t, "Header", r.Header, http.Header{
-		//		"Host":             []string{"www.techcrunch.com"},
-		"User-Agent":       []string{"Fake"},
-		"Accept":           []string{"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
-		"Accept-Language":  []string{"en-us,en;q=0.5"},
-		"Accept-Encoding":  []string{"gzip,deflate"},
-		"Accept-Charset":   []string{"ISO-8859-1,utf-8;q=0.7,*;q=0.7"},
-		"Keep-Alive":       []string{"300"},
-		"Content-Length":   []string{"7"},
-		"Proxy-Connection": []string{"keep-alive"},
+		"Accept":           {"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
+		"Accept-Language":  {"en-us,en;q=0.5"},
+		"Accept-Encoding":  {"gzip,deflate"},
+		"Accept-Charset":   {"ISO-8859-1,utf-8;q=0.7,*;q=0.7"},
+		"Keep-Alive":       {"300"},
+		"Proxy-Connection": {"keep-alive"},
+		"Content-Length":   {"7"},
+		"User-Agent":       {"Fake"},
+	})
+	assertAnyEqual(t, "URL", r.URL, &url.URL{
+		Scheme: "http",
+		Host:   "www.techcrunch.com",
+		Path:   "/",
 	})
 }
 
