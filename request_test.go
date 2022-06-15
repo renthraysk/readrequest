@@ -30,7 +30,7 @@ func assertEqual[T comparable](tb testing.TB, name string, got, expected T) {
 	}
 }
 
-func assertAnyEqual(tb testing.TB, name string, got, expected any) {
+func assertAnyEqual[T any](tb testing.TB, name string, got, expected T) {
 	tb.Helper()
 	if !reflect.DeepEqual(got, expected) {
 		tb.Errorf("%s\n%s", name, cmp.Diff(expected, got))
