@@ -93,9 +93,6 @@ func Host(u *url.URL, h http.Header) string {
 func (b *Builder) Header() (http.Header, error) {
 	ssIndex := b.headerCount
 	header := make(http.Header, ssIndex)
-	if ssIndex == 0 {
-		return header, nil
-	}
 	ssValues := make([]string, ssIndex)
 	for i := b.headers; i < len(b.s); {
 		j := i + strings.IndexByte(b.s[i:], ':')
@@ -188,10 +185,10 @@ func (b *Builder) Build() (*http.Request, error) {
 }
 
 func max(a, b int) int {
-	if a >= b {
-		return a
+	if a < b {
+		a = b
 	}
-	return b
+	return a
 }
 
 func coalesce(a, b error) error {
