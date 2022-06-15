@@ -153,18 +153,11 @@ func ContentLength(header http.Header) (int64, error) {
 	return -1, nil
 }
 
-func unexpectedEOF(err error) error {
-	if err == nil || err == io.EOF {
-		return io.ErrUnexpectedEOF
-	}
-	return err
-}
-
 // Builder builds a http.Request
 func (b *Builder) Build() (*http.Request, error) {
 	URL, err := b.URL()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse requesturi: %w", err)
+		return nil, fmt.Errorf("failed to parse RequestURI: %w", err)
 	}
 	header, err := b.Header()
 	if err != nil {
@@ -172,7 +165,7 @@ func (b *Builder) Build() (*http.Request, error) {
 	}
 	contentLength, err := ContentLength(header)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse Content Length: %w", err)
+		return nil, fmt.Errorf("failed to parse Content-Length: %w", err)
 	}
 	host := Host(URL, header)
 	delete(header, "Host")
@@ -203,4 +196,11 @@ func coalesce(a, b error) error {
 		return a
 	}
 	return b
+}
+
+func unexpectedEOF(err error) error {
+	if err == nil || err == io.EOF {
+		return io.ErrUnexpectedEOF
+	}
+	return err
 }
