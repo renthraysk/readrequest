@@ -32,7 +32,7 @@ func New(r *bufio.Reader) (*Builder, error) {
 	const peekInitial = 4 << 10
 	const peekAdvance = 1 << 10
 
-	var p parser
+	p := new(parser)
 
 	buf, err := r.Peek(peekInitial)
 	if len(buf) <= 0 {
@@ -45,7 +45,7 @@ func New(r *bufio.Reader) (*Builder, error) {
 	next, pos, adv, err := p.parseMethod(buf, 1)
 	for next != nil {
 		if adv < len(buf) {
-			next, pos, adv, err = next(&p, buf, pos)
+			next, pos, adv, err = next(p, buf, pos)
 			continue
 		}
 		// buf expansion required
@@ -54,7 +54,7 @@ func New(r *bufio.Reader) (*Builder, error) {
 			return nil, unexpectedEOF(err)
 		}
 		prev := pos
-		next, pos, adv, err = next(&p, buf, pos)
+		next, pos, adv, err = next(p, buf, pos)
 		if prev >= pos {
 			return nil, errors.New("parser stuck?")
 		}
@@ -103,7 +103,7 @@ func (b *Builder) Header() (http.Header, error) {
 		if v, ok := header[key]; ok {
 			switch key {
 			case "Host":
-				return nil, errors.New("duplicate Host headers")
+				return nil, fmt.Errorf("duplicate %s headers", key)
 			case "Content-Length":
 				if len(v) > 0 && v[0] != value {
 					return nil, fmt.Errorf("duplicate %s headers", key)
