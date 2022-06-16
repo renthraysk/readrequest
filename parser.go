@@ -76,7 +76,8 @@ func (p *parser) parseRequestURI(buf []byte, pos int) (fn, int, int, error) {
 }
 
 func (p *parser) newline(buf []byte, pos int) (fn, int, int, error) {
-	if isToken(buf[pos]) {
+	switch {
+	case isToken(buf[pos]):
 		p.headerCount++
 		p.lineStart = pos
 		// First letter of header key should be upper case
@@ -85,19 +86,21 @@ func (p *parser) newline(buf []byte, pos int) (fn, int, int, error) {
 		}
 		pos++
 		return (*parser).headerKey, pos, pos, nil
-	}
-	if buf[pos] != '\r' {
+
+	case buf[pos] == '\r':
+		pos++
+		if pos >= len(buf) {
+			// "unread" '\r' so can resume at this state
+			return (*parser).newline, pos - len("\r"), pos, nil
+		}
+		if buf[pos] != '\n' {
+			return nil, pos, 0, ErrExpectedNewline
+		}
+		return nil, pos + 1, 0, nil // Seen final \r\n\r\n
+
+	default:
 		return nil, pos, 0, ErrExpectedCarriageReturn
 	}
-	pos++
-	if pos >= len(buf) {
-		// "unread" '\r' so can resume at this state
-		return (*parser).newline, pos - len("\r"), pos, nil
-	}
-	if buf[pos] != '\n' {
-		return nil, pos, 0, ErrExpectedNewline
-	}
-	return nil, pos + 1, 0, nil // Seen final \r\n\r\n
 }
 
 func none(buf []byte, pos int) int {
@@ -125,11 +128,8 @@ func transform(key []byte) func([]byte, int) int {
 }
 
 func (p *parser) headerKey(buf []byte, pos int) (fn, int, int, error) {
-	if !isToken(buf[pos]) {
-		return nil, pos, 0, ErrMissingHeaderName
-	}
 	nextA := 'A'
-	if pos == p.lineStart || (pos > 0 && buf[pos-1] == '-') {
+	if pos <= p.lineStart || buf[pos-1] == '-' {
 		nextA = 'a'
 	}
 	for ; pos < len(buf) && isToken(buf[pos]); pos++ {
