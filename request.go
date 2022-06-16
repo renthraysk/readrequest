@@ -97,7 +97,7 @@ func (b *Builder) Header() (http.Header, error) {
 	for i := b.headers; i < len(b.s); {
 		j := i + strings.IndexByte(b.s[i:], ':')
 		k := j + strings.IndexByte(b.s[j:], '\r')
-		key, value := b.s[i:j], trimHorizontalSpace(b.s[j+1:k])
+		key, value := b.s[i:j], trim(b.s[j+1:k])
 		i = k + len("\r\n")
 
 		if v, ok := header[key]; ok {
@@ -106,7 +106,7 @@ func (b *Builder) Header() (http.Header, error) {
 				return nil, errors.New("duplicate Host headers")
 			case "Content-Length":
 				if len(v) > 0 && v[0] != value {
-					return nil, errors.New("duplicate Content-Length headers")
+					return nil, fmt.Errorf("duplicate %s headers", key)
 				}
 			default:
 				header[key] = append(v, value)

@@ -81,10 +81,10 @@ func (p *parser) newline(buf []byte, pos int) (fn, int, int, error) {
 		p.lineStart = pos
 		// First letter of header key should be upper case
 		if isLower(buf[pos]) {
-			buf[pos] ^= 0x20
+			buf[pos] -= 'a' - 'A'
 		}
 		pos++
-		return (*parser).headerName, pos, pos, nil
+		return (*parser).headerKey, pos, pos, nil
 	}
 	if buf[pos] != '\r' {
 		return nil, pos, 0, ErrExpectedCarriageReturn
@@ -116,20 +116,20 @@ func lower(buf []byte, pos int) int {
 	return pos
 }
 
-func transform(b []byte) func([]byte, int) int {
-	switch string(b) {
+func transform(key []byte) func([]byte, int) int {
+	switch string(key) {
 	case "Connection":
 		return lower
 	}
 	return none
 }
 
-func (p *parser) headerName(buf []byte, pos int) (fn, int, int, error) {
+func (p *parser) headerKey(buf []byte, pos int) (fn, int, int, error) {
 	if !isToken(buf[pos]) {
 		return nil, pos, 0, ErrMissingHeaderName
 	}
 	nextA := 'A'
-	if pos <= 0 || buf[pos-1] == '-' {
+	if pos == p.lineStart || (pos > 0 && buf[pos-1] == '-') {
 		nextA = 'a'
 	}
 	for ; pos < len(buf) && isToken(buf[pos]); pos++ {
@@ -142,7 +142,7 @@ func (p *parser) headerName(buf []byte, pos int) (fn, int, int, error) {
 		}
 	}
 	if pos >= len(buf) {
-		return (*parser).headerName, pos, pos, nil
+		return (*parser).headerKey, pos, pos, nil
 	}
 	if buf[pos] != ':' {
 		return nil, pos, 0, ErrExpectedColon
@@ -179,13 +179,16 @@ func (p *parser) ows1(buf []byte, pos int) (fn, int, int, error) {
 	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
 		pos++
 	}
-	if adv := pos + 1; adv >= len(buf) {
-		return (*parser).ows1, pos, adv, nil
+	if pos >= len(buf) {
+		return (*parser).ows1, pos, pos, nil
 	}
 	if buf[pos] != '\r' {
 		return nil, pos, 0, ErrExpectedCarriageReturn
 	}
 	pos++
+	if pos >= len(buf) {
+		return (*parser).ows1, pos - len("\r"), pos, nil
+	}
 	if buf[pos] != '\n' {
 		return nil, pos, 0, ErrExpectedNewline
 	}

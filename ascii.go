@@ -7,17 +7,16 @@ func isDigit(c byte) bool           { return c-'0' <= 9 }
 func isFieldVChar(c byte) bool      { return c > ' ' && c != 0x7F }
 func isHorizontalSpace(c byte) bool { return c == ' ' || c == '\t' }
 
-func trimHorizontalSpace(s string) string {
+func trim(s string) string {
 	i := 0
 	for i < len(s) && isHorizontalSpace(s[i]) {
 		i++
 	}
-	s = s[i:]
-	j := len(s)
-	for j > 0 && isHorizontalSpace(s[j-1]) {
-		j--
+	n := len(s)
+	for n > i && isHorizontalSpace(s[n-1]) {
+		n--
 	}
-	return s[:j]
+	return s[i:n]
 }
 
 const isTokenTable = "" +
