@@ -1,132 +1,93 @@
 package main
 
+import "io"
+
 type parser struct {
 	method      int
 	requestURI  int
 	proto       int
 	headerCount int
-	lineStart   int
-	transform   func([]byte, int) int
 }
 
-// fn return values
-// - next
-// the next parsing routine to call either a new state or a resumption of previous that run out of bytes
-// - pos
-// the current position
-// - adv
-// the current state has requested buf be expanded to atleast adv bytes
-// - err
-// fatal error occurred
-type fn func(*parser, []byte, int) (next fn, pos int, adv int, err error)
-
-func (p *parser) parseMethod(buf []byte, pos int) (fn, int, int, error) {
+func (p *parser) parseMethod(buf []byte, pos int) (int, int, error) {
 	for pos < len(buf) && isToken(buf[pos]) {
 		pos++
 	}
 	p.method = pos
 	if adv := pos + len(" / HTTP/0.0\r\n"); adv >= len(buf) {
-		return (*parser).parseMethod, pos, adv, nil
+		return pos, adv, nil
 	}
 	if buf[pos] != ' ' {
-		return nil, pos, 0, ErrExpectedSpace
+		return pos, 0, ErrExpectedSpace
 	}
 	pos++
 	if !isFieldVChar(buf[pos]) {
-		return nil, pos, 0, ErrMissingRequestURI
+		return pos, 0, ErrMissingRequestURI
 	}
 	for pos < len(buf) && isFieldVChar(buf[pos]) {
 		pos++
 	}
 	p.requestURI = pos
 	if adv := pos + len(" HTTP/0.0\r\n"); adv >= len(buf) {
-		return (*parser).parseMethod, 0, adv, nil
+		return 0, adv, nil
 	}
 	// Space between RequestURI and Protocol
 	if buf[pos] != ' ' {
-		return nil, pos, 0, ErrExpectedSpace
+		return pos, 0, ErrExpectedSpace
 	}
 	pos++
 	// Protocol
 	if string(buf[pos:pos+len("HTTP/")]) != "HTTP/" {
-		return nil, pos, 0, ErrUnknownProtocol
+		return pos, 0, ErrUnknownProtocol
 	}
 	pos += len("HTTP/")
 	if !isDigit(buf[pos]) ||
 		buf[pos+len("0")] != '.' ||
 		!isDigit(buf[pos+len("0.")]) {
-		return nil, pos, 0, ErrUnknownProtocol
+		return pos, 0, ErrUnknownProtocol
 	}
 	pos += len("0.0")
 	p.proto = pos
 	if buf[pos] != '\r' {
-		return nil, pos, 0, ErrExpectedCarriageReturn
+		return pos, 0, ErrExpectedCarriageReturn
 	}
 	pos++
 	if buf[pos] != '\n' {
-		return nil, pos, 0, ErrExpectedNewline
+		return pos, 0, ErrExpectedNewline
 	}
 	pos++
-	return (*parser).newline, pos, pos, nil
+	return pos, pos, nil
 }
 
-func (p *parser) newline(buf []byte, pos int) (fn, int, int, error) {
+func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 	switch {
 	case isToken(buf[pos]):
 		p.headerCount++
-		p.lineStart = pos
 		// First letter of header key should be upper case
 		if isLower(buf[pos]) {
 			buf[pos] -= 'a' - 'A'
 		}
-		pos++
-		return (*parser).headerKey, pos, pos, nil
+		return p.header(buf, pos)
 
 	case buf[pos] == '\r':
 		pos++
 		if pos >= len(buf) {
 			// "unread" '\r' so can resume at this state
-			return (*parser).newline, pos - len("\r"), pos, nil
+			return pos - len("\r"), pos, nil
 		}
 		if buf[pos] != '\n' {
-			return nil, pos, 0, ErrExpectedNewline
+			return pos, 0, ErrExpectedNewline
 		}
-		return nil, pos + 1, 0, nil // Seen final \r\n\r\n
+		return pos + 1, 0, io.EOF // Seen final \r\n\r\n
 
 	default:
-		return nil, pos, 0, ErrExpectedCarriageReturn
+		return pos, 0, ErrExpectedCarriageReturn
 	}
 }
 
-func none(buf []byte, pos int) int {
-	for pos < len(buf) && isFieldVChar(buf[pos]) {
-		pos++
-	}
-	return pos
-}
-
-func lower(buf []byte, pos int) int {
-	for ; pos < len(buf) && isFieldVChar(buf[pos]); pos++ {
-		if isUpper(buf[pos]) {
-			buf[pos] += 'a' - 'A'
-		}
-	}
-	return pos
-}
-
-func transform(key []byte) func([]byte, int) int {
-	switch string(key) {
-	case "Connection":
-		return lower
-	}
-	return none
-}
-
-func (p *parser) headerKey(buf []byte, pos int) (fn, int, int, error) {
-	nextA := 'A'
-	if pos <= p.lineStart || buf[pos-1] == '-' {
-		nextA = 'a'
-	}
+func (p *parser) header(buf []byte, pos int) (int, int, error) {
+	lineStart := pos
+	nextA := 'a'
 	for ; pos < len(buf) && isToken(buf[pos]); pos++ {
 		if buf[pos]-byte(nextA) < 26 {
 			buf[pos] ^= 0x20 // buf[pos] wrong case, toggle
@@ -137,56 +98,54 @@ func (p *parser) headerKey(buf []byte, pos int) (fn, int, int, error) {
 		}
 	}
 	if pos >= len(buf) {
-		return (*parser).headerKey, pos, pos, nil
+		return lineStart, pos, nil
 	}
 	if buf[pos] != ':' {
-		return nil, pos, 0, ErrExpectedColon
+		return 0, 0, ErrExpectedColon
 	}
-	p.transform = transform(buf[p.lineStart:pos])
+	key := buf[lineStart:pos]
 	pos++
-	return (*parser).ows, pos, pos, nil
-}
-
-func (p *parser) ows(buf []byte, pos int) (fn, int, int, error) {
 	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
 		pos++
 	}
 	if pos >= len(buf) {
-		return (*parser).ows, pos, pos, nil
+		return lineStart, pos, nil
 	}
 	// Header value
 	if !isFieldVChar(buf[pos]) {
-		return nil, pos, 0, ErrMissingHeaderValue
+		return pos, 0, ErrMissingHeaderValue
 	}
-	return (*parser).value, pos, pos, nil
-}
-
-func (p *parser) value(buf []byte, pos int) (fn, int, int, error) {
-	pos = p.transform(buf, pos)
-	next := (*parser).ows1
+	switch string(key) {
+	case "Connection":
+		for ; pos < len(buf) && isFieldVChar(buf[pos]); pos++ {
+			if isUpper(buf[pos]) {
+				buf[pos] += 'a' - 'A'
+			}
+		}
+	default:
+		for pos < len(buf) && isFieldVChar(buf[pos]) {
+			pos++
+		}
+	}
 	if pos >= len(buf) {
-		next = (*parser).value
+		return lineStart, pos, nil
 	}
-	return next, pos, pos, nil
-}
-
-func (p *parser) ows1(buf []byte, pos int) (fn, int, int, error) {
 	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
 		pos++
 	}
 	if pos >= len(buf) {
-		return (*parser).ows1, pos, pos, nil
+		return lineStart, pos, nil
 	}
 	if buf[pos] != '\r' {
-		return nil, pos, 0, ErrExpectedCarriageReturn
+		return pos, 0, ErrExpectedCarriageReturn
 	}
 	pos++
 	if pos >= len(buf) {
-		return (*parser).ows1, pos - len("\r"), pos, nil
+		return lineStart, pos, nil
 	}
 	if buf[pos] != '\n' {
-		return nil, pos, 0, ErrExpectedNewline
+		return pos, 0, ErrExpectedNewline
 	}
 	pos++
-	return (*parser).newline, pos, pos, nil
+	return pos, pos, nil
 }

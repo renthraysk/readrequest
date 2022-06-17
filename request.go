@@ -75,27 +75,27 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 
 	req := &http.Request{}
 
-	next, pos, adv, err := p.parseMethod(buf, 0)
-	for next != nil {
+	pos, adv, err := p.parseMethod(buf, 0)
+	for err == nil {
 		if adv < len(buf) {
-			next, pos, adv, err = next(p, buf, pos)
+			pos, adv, err = p.newline(buf, pos)
 			continue
 		}
-		if err = p.Set(req, string(buf[:p.lineStart])); err != nil {
+		if err = p.Set(req, string(buf[:pos])); err != nil {
 			return nil, err
 		}
-		r.Discard(p.lineStart)
-		adv -= p.lineStart
-		buf, err = r.Peek(peekAdvance)
+		r.Discard(pos)
+		adv -= pos
+		buf, err = r.Peek(max(adv, peekAdvance))
 		if adv >= len(buf) {
 			return nil, unexpectedEOF(err)
 		}
-		next, pos, adv, err = p.newline(buf, 0)
+		pos, adv, err = p.newline(buf, 0)
 		if pos <= 0 {
 			return nil, errors.New("parser stuck?")
 		}
 	}
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return nil, err
 	}
 	if err = p.Set(req, string(buf[:pos-len("\r\n")])); err != nil {
