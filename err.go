@@ -16,6 +16,6 @@ const (
 	ErrMissingHeaderName      = ErrorString("missing header name")
 	ErrMissingHeaderValue     = ErrorString("missing header value")
 
-	ErrDuplicateHost          = ErrorString("duplicate Host header")
-	ErrDuplicateContentLength = ErrorString("duplicate Content-Length header")
+	ErrDuplicateHost             = ErrorString("duplicate Host header")
+	ErrInconsistentContentLength = ErrorString("inconsistent Content-Length header")
 )

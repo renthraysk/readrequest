@@ -68,13 +68,27 @@ func TestDuplicateHosts(t *testing.T) {
 }
 
 func TestDuplicateContentLength(t *testing.T) {
-	const in = "GET / HTTP/1.1\r\n" +
-		"Content-Length: 7\r\n" +
-		"Content-Length: 8\r\n\r\n"
-	rdr := bufio.NewReader(strings.NewReader(in))
-	_, err := ReadRequest(rdr)
-	if err != ErrDuplicateContentLength {
-		t.Fatalf("expected err %q got %q", ErrDuplicateHost, err)
+	{
+		// Consistent Content-Length are ok
+		const in = "GET / HTTP/1.1\r\n" +
+			"Content-Length: 7\r\n" +
+			"Content-Length: 7\r\n\r\n"
+		rdr := bufio.NewReader(strings.NewReader(in))
+		_, err := ReadRequest(rdr)
+		if err != nil {
+			t.Fatalf("got error %q", err)
+		}
+	}
+	{
+		// Different
+		const in = "GET / HTTP/1.1\r\n" +
+			"Content-Length: 7\r\n" +
+			"Content-Length: 8\r\n\r\n"
+		rdr := bufio.NewReader(strings.NewReader(in))
+		_, err := ReadRequest(rdr)
+		if err != ErrInconsistentContentLength {
+			t.Fatalf("expected err %q got %q", ErrInconsistentContentLength, err)
+		}
 	}
 }
 

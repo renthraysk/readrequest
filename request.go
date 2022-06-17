@@ -44,7 +44,7 @@ func (p *parser) Set(r *http.Request, s string) error {
 				return ErrDuplicateHost
 			case "Content-Length":
 				if len(v) > 0 && v[0] != value {
-					return ErrDuplicateContentLength
+					return ErrInconsistentContentLength
 				}
 			default:
 				r.Header[key] = append(v, value)
