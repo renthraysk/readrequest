@@ -13,7 +13,7 @@ import (
 
 func (p *parser) Set(r *http.Request, s string) error {
 	pos := 0
-	if r.Method == "" {
+	if p.proto != 0 {
 		r.Method = s[:p.method]
 		pos = p.method + len(" ")
 		r.RequestURI = s[pos:p.requestURI]
@@ -22,6 +22,9 @@ func (p *parser) Set(r *http.Request, s string) error {
 		r.ProtoMajor = int(r.Proto[len("HTTP/")] - '0')
 		r.ProtoMinor = int(r.Proto[len("HTTP/0.")] - '0')
 		pos = p.proto + len("\r\n")
+		p.method = 0
+		p.requestURI = 0
+		p.proto = 0
 	}
 
 	index := p.headerCount
