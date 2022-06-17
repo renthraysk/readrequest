@@ -107,7 +107,7 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	req.Host = Host(req.URL, req.Header)
 	delete(req.Header, "Host")
 
-	req.Close = Close(req)
+	req.Close = Close(req.ProtoMajor, req.ProtoMinor, req.Header)
 
 	return req, nil
 }
@@ -122,26 +122,27 @@ func Host(u *url.URL, h http.Header) string {
 	return ""
 }
 
-func Close(r *http.Request) bool {
-	if r.ProtoMajor < 1 {
+func Close(protoMajor, protoMinor int, h http.Header) bool {
+	if protoMajor < 1 {
 		return true
 	}
-	if v, ok := r.Header["Connection"]; ok {
-		var close, keepAlive bool
-		for _, s := range v {
-			switch s {
-			case "close":
-				close = true
-			case "keep-alive":
-				keepAlive = true
-			}
-		}
-		if r.ProtoMajor == 1 && r.ProtoMinor == 0 {
-			return close && !keepAlive
-		}
-		return close
+	v, ok := h["Connection"]
+	if !ok {
+		return false
 	}
-	return false
+	var close, keepAlive bool
+	for _, s := range v {
+		switch s {
+		case "close":
+			close = true
+		case "keep-alive":
+			keepAlive = true
+		}
+	}
+	if protoMajor == 1 && protoMinor == 0 {
+		return close && !keepAlive
+	}
+	return close
 }
 
 func ContentLength(header http.Header) (int64, error) {
