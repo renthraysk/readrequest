@@ -11,26 +11,55 @@ import (
 	"strings"
 )
 
-func ReadRequest(r *bufio.Reader) (*http.Request, error) {
-	builder, err := New(r)
-	if err != nil {
-		return nil, err
+func (p *parser) Set(r *http.Request, s string) error {
+	pos := 0
+	if r.Method == "" {
+		r.Method = s[:p.method]
+		pos = p.method + len(" ")
+		r.RequestURI = s[pos:p.requestURI]
+		pos = p.requestURI + len(" ")
+		r.Proto = s[pos:p.proto]
+		r.ProtoMajor = int(r.Proto[len("HTTP/")] - '0')
+		r.ProtoMinor = int(r.Proto[len("HTTP/0.")] - '0')
+		pos = p.proto + len("\r\n")
 	}
-	return builder.Build()
+
+	index := p.headerCount
+	if r.Header == nil {
+		r.Header = make(http.Header, index)
+	}
+	if index == 0 {
+		return nil
+	}
+	values := make([]string, index)
+	for pos < len(s) {
+		i := pos + strings.IndexByte(s[pos:], ':')
+		j := i + strings.IndexByte(s[i:], '\r')
+		key, value := s[pos:i], trim(s[i+1:j])
+		pos = j + len("\r\n")
+		if v, ok := r.Header[key]; ok {
+			switch key {
+			case "Host":
+				return fmt.Errorf("duplicate %s headers", key)
+			case "Content-Length":
+				if len(v) > 0 && v[0] != value {
+					return fmt.Errorf("duplicate %s headers", key)
+				}
+			default:
+				r.Header[key] = append(v, value)
+			}
+		} else {
+			index--
+			values[index] = value
+			r.Header[key] = values[index : index+1 : index+1]
+		}
+	}
+	return nil
 }
 
-// Builder a thing that creates http.Request{} from a bufio.Reader
-type Builder struct {
-	s           string
-	requestURI  int
-	protocol    int
-	headers     int
-	headerCount int
-}
-
-func New(r *bufio.Reader) (*Builder, error) {
-	const peekInitial = 4 << 10
-	const peekAdvance = 1 << 10
+func ReadRequest(r *bufio.Reader) (*http.Request, error) {
+	const peekInitial = 8 << 10
+	const peekAdvance = 4 << 10
 
 	p := new(parser)
 
@@ -42,43 +71,46 @@ func New(r *bufio.Reader) (*Builder, error) {
 		return nil, ErrMissingMethod
 	}
 
-	next, pos, adv, err := p.parseMethod(buf, 1)
+	req := &http.Request{}
+
+	next, pos, adv, err := p.parseMethod(buf, 0)
 	for next != nil {
 		if adv < len(buf) {
 			next, pos, adv, err = next(p, buf, pos)
 			continue
 		}
-		// buf expansion required
-		buf, err = r.Peek(max(adv, pos+peekAdvance))
+		p.Set(req, string(buf[:p.lineStart]))
+		r.Discard(p.lineStart)
+		adv -= p.lineStart
+		buf, err = r.Peek(peekAdvance)
 		if adv >= len(buf) {
 			return nil, unexpectedEOF(err)
 		}
-		prev := pos
-		next, pos, adv, err = next(p, buf, pos)
-		if prev >= pos {
+		next, pos, adv, err = p.newline(buf, 0)
+		if pos <= 0 {
 			return nil, errors.New("parser stuck?")
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
-	defer r.Discard(pos)
-	return &Builder{
-		s:           string(buf[:pos-len("\r\n")]),
-		requestURI:  p.requestURI,
-		protocol:    p.protocol,
-		headers:     p.headers,
-		headerCount: p.headerCount,
-	}, nil
+	p.Set(req, string(buf[:pos-len("\r\n")]))
+	r.Discard(pos)
+
+	if req.URL, err = url.Parse(req.RequestURI); err != nil {
+		return nil, err
+	}
+	if req.ContentLength, err = ContentLength(req.Header); err != nil {
+		return nil, fmt.Errorf("Content-Length: %w", err)
+	}
+
+	req.Host = Host(req.URL, req.Header)
+	delete(req.Header, "Host")
+
+	req.Close = Close(req)
+
+	return req, nil
 }
-
-func (b *Builder) Method() string     { return b.s[:b.requestURI-len(" ")] }
-func (b *Builder) RequestURI() string { return b.s[b.requestURI : b.protocol-len(" ")] }
-func (b *Builder) Proto() string      { return b.s[b.protocol : b.headers-len("\r\n")] }
-func (b *Builder) ProtoMajor() int    { return int(b.s[b.protocol+len("HTTP/")] - '0') }
-func (b *Builder) ProtoMinor() int    { return int(b.s[b.protocol+len("HTTP/0.")] - '0') }
-
-func (b *Builder) URL() (*url.URL, error) { return url.Parse(b.RequestURI()) }
 
 func Host(u *url.URL, h http.Header) string {
 	if u != nil && u.Host != "" {
@@ -90,41 +122,11 @@ func Host(u *url.URL, h http.Header) string {
 	return ""
 }
 
-func (b *Builder) Header() (http.Header, error) {
-	ssIndex := b.headerCount
-	header := make(http.Header, ssIndex)
-	ssValues := make([]string, ssIndex)
-	for i := b.headers; i < len(b.s); {
-		j := i + strings.IndexByte(b.s[i:], ':')
-		k := j + strings.IndexByte(b.s[j:], '\r')
-		key, value := b.s[i:j], trim(b.s[j+1:k])
-		i = k + len("\r\n")
-
-		if v, ok := header[key]; ok {
-			switch key {
-			case "Host":
-				return nil, fmt.Errorf("duplicate %s headers", key)
-			case "Content-Length":
-				if len(v) > 0 && v[0] != value {
-					return nil, fmt.Errorf("duplicate %s headers", key)
-				}
-			default:
-				header[key] = append(v, value)
-			}
-		} else {
-			ssIndex--
-			ssValues[ssIndex] = value
-			header[key] = ssValues[ssIndex : ssIndex+1 : ssIndex+1]
-		}
-	}
-	return header, nil
-}
-
-func (b *Builder) Close(header http.Header) bool {
-	if b.ProtoMajor() < 1 {
+func Close(r *http.Request) bool {
+	if r.ProtoMajor < 1 {
 		return true
 	}
-	if v, ok := header["Connection"]; ok {
+	if v, ok := r.Header["Connection"]; ok {
 		var close, keepAlive bool
 		for _, s := range v {
 			switch s {
@@ -134,7 +136,7 @@ func (b *Builder) Close(header http.Header) bool {
 				keepAlive = true
 			}
 		}
-		if b.ProtoMajor() == 1 && b.ProtoMinor() == 0 {
+		if r.ProtoMajor == 1 && r.ProtoMinor == 0 {
 			return close && !keepAlive
 		}
 		return close
@@ -151,37 +153,6 @@ func ContentLength(header http.Header) (int64, error) {
 		return i, err
 	}
 	return -1, nil
-}
-
-// Builder builds a http.Request
-func (b *Builder) Build() (*http.Request, error) {
-	URL, err := b.URL()
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse RequestURI: %w", err)
-	}
-	header, err := b.Header()
-	if err != nil {
-		return nil, err
-	}
-	contentLength, err := ContentLength(header)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse Content-Length: %w", err)
-	}
-	host := Host(URL, header)
-	delete(header, "Host")
-
-	return &http.Request{
-		Method:        b.Method(),
-		RequestURI:    b.RequestURI(),
-		Proto:         b.Proto(),
-		ProtoMajor:    b.ProtoMajor(),
-		ProtoMinor:    b.ProtoMinor(),
-		Header:        header,
-		URL:           URL,
-		Host:          host,
-		Close:         b.Close(header),
-		ContentLength: contentLength,
-	}, nil
 }
 
 func max(a, b int) int {

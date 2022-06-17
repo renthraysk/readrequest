@@ -1,9 +1,9 @@
 package main
 
 type parser struct {
+	method      int
 	requestURI  int
-	protocol    int
-	headers     int
+	proto       int
 	headerCount int
 	lineStart   int
 	transform   func([]byte, int) int
@@ -24,6 +24,7 @@ func (p *parser) parseMethod(buf []byte, pos int) (fn, int, int, error) {
 	for pos < len(buf) && isToken(buf[pos]) {
 		pos++
 	}
+	p.method = pos
 	if adv := pos + len(" / HTTP/0.0\r\n"); adv >= len(buf) {
 		return (*parser).parseMethod, pos, adv, nil
 	}
@@ -34,17 +35,12 @@ func (p *parser) parseMethod(buf []byte, pos int) (fn, int, int, error) {
 	if !isFieldVChar(buf[pos]) {
 		return nil, pos, 0, ErrMissingRequestURI
 	}
-	p.requestURI = pos
-	pos++
-	return (*parser).parseRequestURI, pos, pos, nil
-}
-
-func (p *parser) parseRequestURI(buf []byte, pos int) (fn, int, int, error) {
 	for pos < len(buf) && isFieldVChar(buf[pos]) {
 		pos++
 	}
+	p.requestURI = pos
 	if adv := pos + len(" HTTP/0.0\r\n"); adv >= len(buf) {
-		return (*parser).parseRequestURI, pos, adv, nil
+		return (*parser).parseMethod, 0, adv, nil
 	}
 	// Space between RequestURI and Protocol
 	if buf[pos] != ' ' {
@@ -52,7 +48,6 @@ func (p *parser) parseRequestURI(buf []byte, pos int) (fn, int, int, error) {
 	}
 	pos++
 	// Protocol
-	p.protocol = pos
 	if string(buf[pos:pos+len("HTTP/")]) != "HTTP/" {
 		return nil, pos, 0, ErrUnknownProtocol
 	}
@@ -63,6 +58,7 @@ func (p *parser) parseRequestURI(buf []byte, pos int) (fn, int, int, error) {
 		return nil, pos, 0, ErrUnknownProtocol
 	}
 	pos += len("0.0")
+	p.proto = pos
 	if buf[pos] != '\r' {
 		return nil, pos, 0, ErrExpectedCarriageReturn
 	}
@@ -71,7 +67,6 @@ func (p *parser) parseRequestURI(buf []byte, pos int) (fn, int, int, error) {
 		return nil, pos, 0, ErrExpectedNewline
 	}
 	pos++
-	p.headers = pos
 	return (*parser).newline, pos, pos, nil
 }
 

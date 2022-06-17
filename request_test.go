@@ -38,20 +38,6 @@ func assertAnyEqual[T any](tb testing.TB, name string, got, expected T) {
 	}
 }
 
-func TestQuickBuilder(t *testing.T) {
-	rdr := bufio.NewReader(strings.NewReader(quickTest))
-
-	b, err := New(rdr)
-	if err != nil {
-		t.Fatalf("error occurred: %v", err)
-	}
-	assertEqual(t, "Method", b.Method(), "GET")
-	assertEqual(t, "RequestURI", b.RequestURI(), "http://www.techcrunch.com/")
-	assertEqual(t, "Proto", b.Proto(), "HTTP/1.1")
-	assertEqual(t, "ProtoMajor", b.ProtoMajor(), 1)
-	assertEqual(t, "ProtoMinor", b.ProtoMinor(), 1)
-}
-
 func TestQuickReadRequest(t *testing.T) {
 	rdr := bufio.NewReader(strings.NewReader(quickTest))
 	r, err := ReadRequest(rdr)
@@ -65,6 +51,7 @@ func TestQuickReadRequest(t *testing.T) {
 	assertEqual(t, "ProtoMinor", r.ProtoMinor, 1)
 	assertEqual(t, "Host", r.Host, "www.techcrunch.com")
 	assertEqual(t, "Close", r.Close, false)
+	assertEqual(t, "ContentLength", r.ContentLength, 7)
 	assertAnyEqual(t, "Header", r.Header, http.Header{
 		"Accept":           {"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
 		"Accept-Language":  {"en-us,en;q=0.5"},
@@ -80,19 +67,6 @@ func TestQuickReadRequest(t *testing.T) {
 		Host:   "www.techcrunch.com",
 		Path:   "/",
 	})
-}
-
-func BenchmarkBuilder(b *testing.B) {
-	sr := strings.NewReader(quickTest)
-	br := bufio.NewReader(sr)
-
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		sr.Reset(quickTest)
-		br.Reset(sr)
-		_, _ = New(br)
-	}
 }
 
 func BenchmarkReadRequest(b *testing.B) {
