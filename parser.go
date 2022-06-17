@@ -62,7 +62,6 @@ func (p *parser) parseMethod(buf []byte, pos int) (int, int, error) {
 func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 	switch {
 	case isToken(buf[pos]):
-		p.headerCount++
 		return p.header(buf, pos)
 
 	case buf[pos] == '\r':
@@ -145,6 +144,7 @@ func (p *parser) header(buf []byte, pos int) (int, int, error) {
 	if buf[pos] != '\n' {
 		return pos, 0, ErrExpectedNewline
 	}
+	p.headerCount++
 	pos++
 	return pos, pos, nil
 }
