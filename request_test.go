@@ -24,20 +24,6 @@ var quickTest = "" +
 	"Proxy-Connection: keep-alive\r\n\r\n" +
 	"abcdef\n???"
 
-func assertEqual[T comparable](tb testing.TB, name string, got, expected T) {
-	tb.Helper()
-	if got != expected {
-		tb.Errorf("%s expected %v, got %v", name, expected, got)
-	}
-}
-
-func assertAnyEqual[T any](tb testing.TB, name string, got, expected T) {
-	tb.Helper()
-	if !reflect.DeepEqual(got, expected) {
-		tb.Errorf("%s\n%s", name, cmp.Diff(expected, got))
-	}
-}
-
 func TestQuickReadRequest(t *testing.T) {
 	rdr := bufio.NewReader(strings.NewReader(quickTest))
 	r, err := ReadRequest(rdr)
@@ -69,6 +55,29 @@ func TestQuickReadRequest(t *testing.T) {
 	})
 }
 
+func TestDuplicateHosts(t *testing.T) {
+	const in = "GET / HTTP/1.1\r\n" +
+		"Host: abc\r\n" +
+		"Host: abc\r\n\r\n"
+
+	rdr := bufio.NewReader(strings.NewReader(in))
+	_, err := ReadRequest(rdr)
+	if err != ErrDuplicateHost {
+		t.Fatalf("expected err %q got %q", ErrDuplicateHost, err)
+	}
+}
+
+func TestDuplicateContentLength(t *testing.T) {
+	const in = "GET / HTTP/1.1\r\n" +
+		"Content-Length: 7\r\n" +
+		"Content-Length: 8\r\n\r\n"
+	rdr := bufio.NewReader(strings.NewReader(in))
+	_, err := ReadRequest(rdr)
+	if err != ErrDuplicateContentLength {
+		t.Fatalf("expected err %q got %q", ErrDuplicateHost, err)
+	}
+}
+
 func BenchmarkReadRequest(b *testing.B) {
 	sr := strings.NewReader(quickTest)
 	br := bufio.NewReader(sr)
@@ -89,5 +98,19 @@ func BenchmarkStdlibReadRequest(b *testing.B) {
 		r0.Reset(quickTest)
 		r1.Reset(r0)
 		http.ReadRequest(r1)
+	}
+}
+
+func assertEqual[T comparable](tb testing.TB, name string, got, expected T) {
+	tb.Helper()
+	if got != expected {
+		tb.Errorf("%s expected %v, got %v", name, expected, got)
+	}
+}
+
+func assertAnyEqual[T any](tb testing.TB, name string, got, expected T) {
+	tb.Helper()
+	if !reflect.DeepEqual(got, expected) {
+		tb.Errorf("%s\n%s", name, cmp.Diff(expected, got))
 	}
 }

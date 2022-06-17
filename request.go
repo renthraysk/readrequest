@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,10 +41,10 @@ func (p *parser) Set(r *http.Request, s string) error {
 		if v, ok := r.Header[key]; ok {
 			switch key {
 			case "Host":
-				return fmt.Errorf("duplicate %s headers", key)
+				return ErrDuplicateHost
 			case "Content-Length":
 				if len(v) > 0 && v[0] != value {
-					return fmt.Errorf("duplicate %s headers", key)
+					return ErrDuplicateContentLength
 				}
 			default:
 				r.Header[key] = append(v, value)
@@ -91,9 +90,6 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 			return nil, unexpectedEOF(err)
 		}
 		pos, adv, err = p.newline(buf, 0)
-		if pos <= 0 {
-			return nil, errors.New("parser stuck?")
-		}
 	}
 	if err != nil && err != io.EOF {
 		return nil, err

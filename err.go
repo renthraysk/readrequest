@@ -15,4 +15,7 @@ const (
 	ErrMissingRequestURI      = ErrorString("missing request uri")
 	ErrMissingHeaderName      = ErrorString("missing header name")
 	ErrMissingHeaderValue     = ErrorString("missing header value")
+
+	ErrDuplicateHost          = ErrorString("duplicate Host header")
+	ErrDuplicateContentLength = ErrorString("duplicate Content-Length header")
 )
