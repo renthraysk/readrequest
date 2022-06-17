@@ -83,8 +83,7 @@ func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 
 func (p *parser) header(buf []byte, pos int) (int, int, error) {
 	lineStart := pos
-	nextA := 'a'
-	for ; pos < len(buf) && isToken(buf[pos]); pos++ {
+	for nextA := 'a'; pos < len(buf) && isToken(buf[pos]); pos++ {
 		if buf[pos]-byte(nextA) < 26 {
 			buf[pos] ^= 0x20 // buf[pos] wrong case, toggle
 		}
