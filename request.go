@@ -25,6 +25,7 @@ func (p *parser) Set(r *http.Request, s string) error {
 	}
 
 	index := p.headerCount
+	p.headerCount = 0
 	if r.Header == nil {
 		r.Header = make(http.Header, index)
 	}
