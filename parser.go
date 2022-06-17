@@ -63,10 +63,6 @@ func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 	switch {
 	case isToken(buf[pos]):
 		p.headerCount++
-		// First letter of header key should be upper case
-		if isLower(buf[pos]) {
-			buf[pos] -= 'a' - 'A'
-		}
 		return p.header(buf, pos)
 
 	case buf[pos] == '\r':
@@ -100,11 +96,13 @@ func (p *parser) header(buf []byte, pos int) (int, int, error) {
 	if pos >= len(buf) {
 		return lineStart, pos, nil
 	}
+	// Colon
 	if buf[pos] != ':' {
 		return 0, 0, ErrExpectedColon
 	}
 	key := buf[lineStart:pos]
 	pos++
+	// Optional white space
 	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
 		pos++
 	}
@@ -117,6 +115,7 @@ func (p *parser) header(buf []byte, pos int) (int, int, error) {
 	}
 	switch string(key) {
 	case "Connection":
+		// Lower case value
 		for ; pos < len(buf) && isFieldVChar(buf[pos]); pos++ {
 			if isUpper(buf[pos]) {
 				buf[pos] += 'a' - 'A'
@@ -130,6 +129,7 @@ func (p *parser) header(buf []byte, pos int) (int, int, error) {
 	if pos >= len(buf) {
 		return lineStart, pos, nil
 	}
+	// Optional whitespace
 	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
 		pos++
 	}
