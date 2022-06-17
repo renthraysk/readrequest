@@ -22,8 +22,6 @@ func (p *parser) Set(r *http.Request, s string) error {
 		r.ProtoMajor = int(r.Proto[len("HTTP/")] - '0')
 		r.ProtoMinor = int(r.Proto[len("HTTP/0.")] - '0')
 		pos = p.proto + len("\r\n")
-		p.method = 0
-		p.requestURI = 0
 		p.proto = 0
 	}
 
@@ -83,7 +81,9 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 			next, pos, adv, err = next(p, buf, pos)
 			continue
 		}
-		p.Set(req, string(buf[:p.lineStart]))
+		if err = p.Set(req, string(buf[:p.lineStart])); err != nil {
+			return nil, err
+		}
 		r.Discard(p.lineStart)
 		adv -= p.lineStart
 		buf, err = r.Peek(peekAdvance)
@@ -98,7 +98,9 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.Set(req, string(buf[:pos-len("\r\n")]))
+	if err = p.Set(req, string(buf[:pos-len("\r\n")])); err != nil {
+		return nil, err
+	}
 	r.Discard(pos)
 
 	if req.URL, err = url.Parse(req.RequestURI); err != nil {
