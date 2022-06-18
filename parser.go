@@ -1,7 +1,5 @@
 package main
 
-import "io"
-
 type parser struct {
 	method      int
 	requestURI  int
@@ -73,7 +71,7 @@ func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 		if buf[pos] != '\n' {
 			return pos, 0, ErrExpectedNewline
 		}
-		return pos + 1, 0, io.EOF // Seen final \r\n\r\n
+		return pos + 1, 0, EOH // Seen final \r\n\r\n
 
 	default:
 		return pos, 0, ErrExpectedCarriageReturn
