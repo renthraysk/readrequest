@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestQuickReadRequest(t *testing.T) {
 	assertEqual(t, "ProtoMajor", r.ProtoMajor, 1)
 	assertEqual(t, "ProtoMinor", r.ProtoMinor, 1)
 	assertEqual(t, "Host", r.Host, "www.techcrunch.com")
-	assertEqual(t, "Close", r.Close, false)
+	assertEqual(t, "Close", r.Close, true)
 	assertEqual(t, "ContentLength", r.ContentLength, 7)
 	assertAnyEqual(t, "Header", r.Header, http.Header{
 		"Accept":           {"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
@@ -56,39 +57,91 @@ func TestQuickReadRequest(t *testing.T) {
 }
 
 func TestDuplicateHosts(t *testing.T) {
-	const in = "GET / HTTP/1.1\r\n" +
-		"Host: abc\r\n" +
-		"Host: abc\r\n\r\n"
-
-	rdr := bufio.NewReader(strings.NewReader(in))
-	_, err := ReadRequest(rdr)
-	if err != ErrDuplicateHost {
-		t.Fatalf("expected err %q got %q", ErrDuplicateHost, err)
+	cases := []struct {
+		in  string
+		err error
+	}{
+		{"GET / HTTP/1.1\r\n" + "Host: example.org\r\n" + "Host: example.org\r\n\r\n", ErrDuplicateHost},
+		{"GET / HTTP/1.1\r\n" + "host: example.org\r\n" + "HOST: example.org\r\n\r\n", ErrDuplicateHost},
+	}
+	for _, s := range cases {
+		rdr := bufio.NewReader(strings.NewReader(s.in))
+		_, err := ReadRequest(rdr)
+		if err != s.err {
+			t.Fatalf("expected error %q, got %q", s.err, err)
+		}
 	}
 }
 
-func TestDuplicateContentLength(t *testing.T) {
-	{
-		// Consistent Content-Length are ok
-		const in = "GET / HTTP/1.1\r\n" +
-			"Content-Length: 7\r\n" +
-			"Content-Length: 7\r\n\r\n"
-		rdr := bufio.NewReader(strings.NewReader(in))
-		_, err := ReadRequest(rdr)
-		if err != nil {
-			t.Fatalf("got error %q", err)
+func TestContentLength(t *testing.T) {
+	cases := []struct {
+		in  string
+		err error
+	}{
+		{"GET / HTTP/1.1\r\n" + "Content-Length: 7\r\n" + "Content-Length: 7\r\n\r\n", nil},
+		{"GET / HTTP/1.1\r\n" + "Content-Length: 7\r\n" + "Content-Length: 8\r\n\r\n", ErrInconsistentContentLength},
+		{"GET / HTTP/1.1\r\n" + "Content-Length: 7\r\n" + "Content-Length: 7\r\n" + "Content-Length: 8\r\n\r\n", ErrInconsistentContentLength},
+	}
+	for _, s := range cases {
+		rdr := bufio.NewReader(strings.NewReader(s.in))
+		r, err := ReadRequest(rdr)
+		if err != s.err {
+			t.Fatalf("expected error %q, got %q", s.err, err)
+		}
+		if s.err == nil {
+			assertEqual(t, "Content-Length", r.ContentLength, 7)
 		}
 	}
-	{
-		// Different
-		const in = "GET / HTTP/1.1\r\n" +
-			"Content-Length: 7\r\n" +
-			"Content-Length: 8\r\n\r\n"
-		rdr := bufio.NewReader(strings.NewReader(in))
-		_, err := ReadRequest(rdr)
-		if err != ErrInconsistentContentLength {
-			t.Fatalf("expected err %q got %q", ErrInconsistentContentLength, err)
-		}
+}
+
+func TestConnection(t *testing.T) {
+	cases := []struct {
+		in    string
+		close bool
+	}{
+		{"GET / HTTP/0.0\r\n\r\n", true},
+		{"GET / HTTP/0.0\r\nConnection: Close\r\n\r\n", true},
+		{"GET / HTTP/0.0\r\nConnection: Keep-Alive\r\n\r\n", true},
+		{"GET / HTTP/1.0\r\n\r\n", true},
+		{"GET / HTTP/1.0\r\nConnection: Close\r\n\r\n", true},
+		{"GET / HTTP/1.0\r\nConnection: Keep-Alive\r\n\r\n", false},
+		{"GET / HTTP/1.0\r\nConnection: Close\r\nConnection: Keep-Alive\r\n\r\n", false},
+		{"GET / HTTP/1.1\r\n\r\n", true},
+		{"GET / HTTP/1.1\r\nConnection: Close\r\n\r\n", true},
+		{"GET / HTTP/1.1\r\nConnection: Keep-Alive\r\n\r\n", false},
+		{"GET / HTTP/1.1\r\nConnection: Close\r\nConnection: Keep-Alive\r\n\r\n", true},
+	}
+
+	for i, s := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			rdr := bufio.NewReader(strings.NewReader(s.in))
+			r, err := ReadRequest(rdr)
+			if err != nil {
+				t.Fatalf("unexpected error %q", err)
+			}
+			assertEqual(t, "Close", r.Close, s.close)
+		})
+	}
+}
+
+func TestPragma(t *testing.T) {
+	cases := []struct {
+		in           string
+		cacheControl []string
+	}{
+		{"GET / HTTP/0.0\r\n\r\n", nil},
+		{"GET / HTTP/0.0\r\nPragma: no-cache\r\n\r\n", []string{"no-cache"}},
+		{"GET / HTTP/0.0\r\nPragma: no-cache\r\nCache-Control: public\r\n\r\n", []string{"public"}},
+	}
+	for i, s := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			rdr := bufio.NewReader(strings.NewReader(s.in))
+			r, err := ReadRequest(rdr)
+			if err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+			assertAnyEqual(t, "Cache-Control", r.Header["Cache-Control"], s.cacheControl)
+		})
 	}
 }
 
@@ -103,7 +156,7 @@ func BenchmarkReadRequest(b *testing.B) {
 	}
 }
 
-func BenchmarkStdlibReadRequest(b *testing.B) {
+func XBenchmarkReadRequest(b *testing.B) {
 	r0 := strings.NewReader(quickTest)
 	r1 := bufio.NewReader(r0)
 

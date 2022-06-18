@@ -80,8 +80,7 @@ func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 	}
 }
 
-func (p *parser) header(buf []byte, pos int) (int, int, error) {
-	lineStart := pos
+func key(buf []byte, pos int) int {
 	for nextA := 'a'; pos < len(buf) && isToken(buf[pos]); pos++ {
 		if buf[pos]-byte(nextA) < 26 {
 			buf[pos] ^= 0x20 // buf[pos] wrong case, toggle
@@ -91,6 +90,19 @@ func (p *parser) header(buf []byte, pos int) (int, int, error) {
 			nextA = 'a'
 		}
 	}
+	return pos
+}
+
+func skipOptionalSpace(buf []byte, pos int) int {
+	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
+		pos++
+	}
+	return pos
+}
+
+func (p *parser) header(buf []byte, pos int) (int, int, error) {
+	lineStart := pos
+	pos = key(buf, pos)
 	if pos >= len(buf) {
 		return lineStart, pos, nil
 	}
@@ -99,11 +111,7 @@ func (p *parser) header(buf []byte, pos int) (int, int, error) {
 		return 0, 0, ErrExpectedColon
 	}
 	key := buf[lineStart:pos]
-	pos++
-	// Optional white space
-	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
-		pos++
-	}
+	pos = skipOptionalSpace(buf, pos+1)
 	if pos >= len(buf) {
 		return lineStart, pos, nil
 	}
@@ -112,7 +120,7 @@ func (p *parser) header(buf []byte, pos int) (int, int, error) {
 		return pos, 0, ErrMissingHeaderValue
 	}
 	switch string(key) {
-	case "Connection":
+	case "Connection", "Transfer-Encoding":
 		// Lower case value
 		for ; pos < len(buf) && isFieldVChar(buf[pos]); pos++ {
 			if isUpper(buf[pos]) {
@@ -127,10 +135,7 @@ func (p *parser) header(buf []byte, pos int) (int, int, error) {
 	if pos >= len(buf) {
 		return lineStart, pos, nil
 	}
-	// Optional whitespace
-	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
-		pos++
-	}
+	pos = skipOptionalSpace(buf, pos)
 	if pos >= len(buf) {
 		return lineStart, pos, nil
 	}

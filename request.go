@@ -102,19 +102,21 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	if req.URL, err = url.Parse(req.RequestURI); err != nil {
 		return nil, err
 	}
-	if req.ContentLength, err = ContentLength(req.Header); err != nil {
+	if req.ContentLength, err = contentLength(req.Header); err != nil {
 		return nil, fmt.Errorf("Content-Length: %w", err)
 	}
 
-	req.Host = Host(req.URL, req.Header)
+	pragmaCacheControl(req.Header)
+
+	req.Host = host(req.URL, req.Header)
 	delete(req.Header, "Host")
 
-	req.Close = Close(req.ProtoMajor, req.ProtoMinor, req.Header)
+	req.Close = close(req.ProtoMajor, req.ProtoMinor, req.Header)
 
 	return req, nil
 }
 
-func Host(u *url.URL, h http.Header) string {
+func host(u *url.URL, h http.Header) string {
 	if u != nil && u.Host != "" {
 		return u.Host
 	}
@@ -124,31 +126,42 @@ func Host(u *url.URL, h http.Header) string {
 	return ""
 }
 
-func Close(protoMajor, protoMinor int, h http.Header) bool {
-	if protoMajor < 1 {
-		return true
-	}
-	v, ok := h["Connection"]
-	if !ok {
-		return false
-	}
-	var close, keepAlive bool
-	for _, s := range v {
-		switch s {
-		case "close":
-			close = true
-		case "keep-alive":
-			keepAlive = true
+func close(protoMajor, protoMinor int, h http.Header) bool {
+	switch protoMajor {
+	case 1:
+		v, ok := h["Connection"]
+		if !ok {
+			return true
 		}
+		var close, keepAlive bool
+		for _, s := range v {
+			switch s {
+			case "close":
+				close = true
+			case "keep-alive":
+				keepAlive = true
+			}
+		}
+		if protoMinor == 0 {
+			return close && !keepAlive
+
+		}
+		return close
+	case 2:
 	}
-	if protoMajor == 1 && protoMinor == 0 {
-		return close && !keepAlive
-	}
-	return close
+	return true
 }
 
-func ContentLength(header http.Header) (int64, error) {
-	if v, ok := header["Content-Length"]; ok && len(v) > 0 {
+func pragmaCacheControl(h http.Header) {
+	if v, ok := h["Pragma"]; ok && len(v) > 0 && v[0] == "no-cache" {
+		if _, ok = h["Cache-Control"]; !ok {
+			h["Cache-Control"] = v[:1:1]
+		}
+	}
+}
+
+func contentLength(h http.Header) (int64, error) {
+	if v, ok := h["Content-Length"]; ok && len(v) > 0 {
 		i, err := strconv.ParseInt(v[0], 10, 64)
 		if err != nil {
 			i = -1
