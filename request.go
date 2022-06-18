@@ -13,9 +13,15 @@ import (
 func (p *parser) Set(r *http.Request, s string) error {
 	pos := 0
 	if p.proto != 0 {
+		var err error
+
 		r.Method = s[:p.method]
 		pos = p.method + len(" ")
 		r.RequestURI = s[pos:p.requestURI]
+		r.URL, err = url.Parse(r.RequestURI)
+		if err != nil {
+			return err
+		}
 		pos = p.requestURI + len(" ")
 		r.Proto = s[pos:p.proto]
 		r.ProtoMajor = int(r.Proto[len("HTTP/")] - '0')
@@ -71,7 +77,6 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	if !isToken(buf[0]) {
 		return nil, ErrMissingMethod
 	}
-
 	req := &http.Request{}
 
 	pos, adv, err := p.parseMethod(buf, 0)
@@ -91,7 +96,7 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 		}
 		pos, adv, err = p.newline(buf, 0)
 	}
-	if err != nil && err != io.EOF {
+	if err != nil && err != EOH {
 		return nil, err
 	}
 	if err = p.Set(req, string(buf[:pos-len("\r\n")])); err != nil {
@@ -99,9 +104,6 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	}
 	r.Discard(pos)
 
-	if req.URL, err = url.Parse(req.RequestURI); err != nil {
-		return nil, err
-	}
 	if req.ContentLength, err = contentLength(req.Header); err != nil {
 		return nil, fmt.Errorf("Content-Length: %w", err)
 	}
@@ -142,11 +144,7 @@ func close(protoMajor, protoMinor int, h http.Header) bool {
 				keepAlive = true
 			}
 		}
-		if protoMinor == 0 {
-			return close && !keepAlive
-
-		}
-		return close
+		return close && (protoMinor != 0 || !keepAlive)
 	case 2:
 	}
 	return true
