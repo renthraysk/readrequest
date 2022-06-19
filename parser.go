@@ -78,26 +78,6 @@ func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 	}
 }
 
-func key(buf []byte, pos int) int {
-	for nextA := 'a'; pos < len(buf) && isToken(buf[pos]); pos++ {
-		if buf[pos]-byte(nextA) < 26 {
-			buf[pos] ^= 0x20 // buf[pos] wrong case, toggle
-		}
-		nextA = 'A'
-		if buf[pos] == '-' {
-			nextA = 'a'
-		}
-	}
-	return pos
-}
-
-func skipOptionalSpace(buf []byte, pos int) int {
-	for pos < len(buf) && isHorizontalSpace(buf[pos]) {
-		pos++
-	}
-	return pos
-}
-
 func (p *parser) header(buf []byte, pos int) (int, int, error) {
 	lineStart := pos
 	pos = key(buf, pos)
