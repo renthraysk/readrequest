@@ -4,7 +4,7 @@ import "runtime"
 
 type set256 [256 / 32]uint32
 
-func (s *set256) Contains(c byte) bool { return (1<<(c%32))&tokenSet[c/32] != 0 }
+func (s *set256) Contains(c byte) bool { return (1<<(c%32))&s[c/32] != 0 }
 
 const (
 	upper  = ((1 << 26) - 1) << 'A'
