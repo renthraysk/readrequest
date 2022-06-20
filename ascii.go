@@ -6,51 +6,42 @@ type set256 [256 / 32]uint32
 
 func (s *set256) Contains(c byte) bool { return (1<<(c%32))&tokenSet[c/32] != 0 }
 
-const tokenMask = ((1<<10)-1)<<'0' |
-	((1<<26)-1)<<'a' |
-	((1<<26)-1)<<'A' |
-	1<<'!' |
-	1<<'#' |
-	1<<'$' |
-	1<<'%' |
-	1<<'&' |
-	1<<'\'' |
-	1<<'*' |
-	1<<'+' |
-	1<<'-' |
-	1<<'.' |
-	1<<'^' |
-	1<<'_' |
-	1<<'`' |
-	1<<'|' |
-	1<<'~'
+const (
+	upper  = ((1 << 26) - 1) << 'A'
+	lower  = ((1 << 26) - 1) << 'a'
+	digits = ((1 << 10) - 1) << '0'
+	tokens = upper | lower | digits |
+		1<<'!' | 1<<'#' | 1<<'$' | 1<<'%' | 1<<'&' | 1<<'\'' | 1<<'*' | 1<<'+' |
+		1<<'-' | 1<<'.' | 1<<'^' | 1<<'_' | 1<<'`' | 1<<'|' | 1<<'~'
+)
 
 var tokenSet = set256{
-	(tokenMask >> (0 * 32)) % (1 << 32),
-	(tokenMask >> (1 * 32)) % (1 << 32),
-	(tokenMask >> (2 * 32)) % (1 << 32),
-	(tokenMask >> (3 * 32)) % (1 << 32),
-	(tokenMask >> (4 * 32)) % (1 << 32),
-	(tokenMask >> (5 * 32)) % (1 << 32),
-	(tokenMask >> (6 * 32)) % (1 << 32),
-	(tokenMask >> (7 * 32)) % (1 << 32),
+	(tokens >> (0 * 32)) % (1 << 32),
+	(tokens >> (1 * 32)) % (1 << 32),
+	(tokens >> (2 * 32)) % (1 << 32),
+	(tokens >> (3 * 32)) % (1 << 32),
+	(tokens >> (4 * 32)) % (1 << 32),
+	(tokens >> (5 * 32)) % (1 << 32),
+	(tokens >> (6 * 32)) % (1 << 32),
+	(tokens >> (7 * 32)) % (1 << 32),
+}
+
+func mask(c byte, lo, hi uint64) uint64 {
+	if c >= 64 {
+		lo = hi
+		if hi != 0 && c >= 128 {
+			lo = 0
+		}
+	}
+	return lo
 }
 
 func isToken(c byte) bool {
-	if tokenMask < (1 << 128) {
-		// @TODO Worth it?
-
-		// If arch & compiler supports conditional moves...
+	if tokens < (1 << 128) {
 		switch runtime.GOARCH {
 		case "amd64", "arm64":
-			m := uint64(tokenMask % (1 << 64))
-			if c >= 64 {
-				m = tokenMask >> 64
-				if tokenMask >= (1<<64) && c >= 128 {
-					m = 0
-				}
-			}
-			return (1<<(c%64))&m != 0
+			// 64-bit and conditional movs available...
+			return (1<<(c%64))&mask(c, tokens%(1<<64), tokens>>64) != 0
 		}
 	}
 	return tokenSet.Contains(c)
