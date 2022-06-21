@@ -10,20 +10,20 @@ import (
 	"strings"
 )
 
-func (p *parser) Set(r *http.Request, s string) error {
+func (p *parser) Set(r *http.Request, lines string) error {
 	pos := 0
 	if p.proto != 0 {
 		var err error
 
-		r.Method = s[:p.method]
+		r.Method = lines[:p.method]
 		pos = p.method + len(" ")
-		r.RequestURI = s[pos:p.requestURI]
+		r.RequestURI = lines[pos:p.requestURI]
 		r.URL, err = url.Parse(r.RequestURI)
 		if err != nil {
 			return err
 		}
 		pos = p.requestURI + len(" ")
-		r.Proto = s[pos:p.proto]
+		r.Proto = lines[pos:p.proto]
 		r.ProtoMajor = int(r.Proto[len("HTTP/")] - '0')
 		r.ProtoMinor = int(r.Proto[len("HTTP/0.")] - '0')
 		pos = p.proto + len("\r\n")
@@ -39,10 +39,10 @@ func (p *parser) Set(r *http.Request, s string) error {
 		return nil
 	}
 	values := make([]string, index)
-	for pos < len(s) {
-		i := pos + strings.IndexByte(s[pos:], ':')
-		j := i + strings.IndexByte(s[i:], '\r')
-		key, value := s[pos:i], trim(s[i+1:j])
+	for pos < len(lines) {
+		i := pos + strings.IndexByte(lines[pos:], ':')
+		j := i + strings.IndexByte(lines[i:], '\r')
+		key, value := lines[pos:i], trim(lines[i+1:j])
 		pos = j + len("\r\n")
 		if v, ok := r.Header[key]; ok {
 			switch key {
