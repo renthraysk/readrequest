@@ -42,7 +42,7 @@ func (p *parser) parseMethod(buf []byte, pos int) (int, int, error) {
 	if !isDigit(buf[pos]) ||
 		buf[pos+len("0")] != '.' ||
 		!isDigit(buf[pos+len("0.")]) {
-		return pos, 0, ErrUnknownProtocol
+		return pos - len("HTTP/"), 0, ErrUnknownProtocol
 	}
 	pos += len("0.0")
 	p.proto = pos
