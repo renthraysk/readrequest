@@ -85,13 +85,14 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 			pos, adv, err = p.newline(buf, pos)
 			continue
 		}
-		if err = p.Set(req, string(buf[:pos])); err != nil {
-			return nil, err
-		}
+
 		if size > http.DefaultMaxHeaderBytes-pos {
 			return nil, ErrHeaderTooLarge
 		}
 		size += pos
+		if err = p.Set(req, string(buf[:pos])); err != nil {
+			return nil, err
+		}
 		r.Discard(pos)
 		adv -= pos
 		buf, err = r.Peek(max(adv, peekAdvance))

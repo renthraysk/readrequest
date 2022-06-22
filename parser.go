@@ -8,12 +8,15 @@ type parser struct {
 }
 
 func (p *parser) parseMethod(buf []byte, pos int) (int, int, error) {
+	if pos >= len(buf) {
+		return pos, pos, nil
+	}
 	for pos < len(buf) && isToken(buf[pos]) {
 		pos++
 	}
 	p.method = pos
-	if adv := pos + len(" / HTTP/0.0\r\n"); adv >= len(buf) {
-		return 0, adv, nil
+	if adv := pos + len(" / HTTP/0.0\r\n"); pos >= len(buf) || adv >= len(buf) {
+		return pos, adv, nil
 	}
 	if buf[pos] != ' ' {
 		return pos, 0, ErrExpectedSpace
@@ -58,7 +61,7 @@ func (p *parser) parseMethod(buf []byte, pos int) (int, int, error) {
 }
 
 func (p *parser) newline(buf []byte, pos int) (int, int, error) {
-	for {
+	for pos < len(buf) {
 		lineStart := pos
 		switch {
 		case isToken(buf[pos]):
@@ -127,4 +130,5 @@ func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 			return pos, 0, ErrExpectedCarriageReturn
 		}
 	}
+	return pos, pos, nil
 }
