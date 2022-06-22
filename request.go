@@ -12,22 +12,24 @@ import (
 
 func (p *parser) Set(r *http.Request, lines string) error {
 	pos := 0
-	if p.proto != 0 {
+	if !p.parsedFirstLine {
 		var err error
 
-		r.Method = lines[:p.method]
-		pos = p.method + len(" ")
-		r.RequestURI = lines[pos:p.requestURI]
+		method := strings.IndexByte(lines, ' ')
+		requestURI := method + 1 + strings.IndexByte(lines[method+1:], ' ')
+		pos = requestURI + 1 + strings.IndexByte(lines[requestURI+1:], '\r')
+
+		r.Method = lines[:method]
+		r.RequestURI = lines[method+1 : requestURI]
+		r.Proto = lines[requestURI+1 : pos]
 		r.URL, err = url.Parse(r.RequestURI)
 		if err != nil {
 			return err
 		}
-		pos = p.requestURI + len(" ")
-		r.Proto = lines[pos:p.proto]
 		r.ProtoMajor = int(r.Proto[len("HTTP/")] - '0')
 		r.ProtoMinor = int(r.Proto[len("HTTP/0.")] - '0')
-		pos = p.proto + len("\r\n")
-		p.proto = 0
+		p.parsedFirstLine = true
+		pos += len("\r\n")
 	}
 
 	index := p.headerCount

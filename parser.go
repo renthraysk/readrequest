@@ -3,10 +3,8 @@ package main
 import "net/http"
 
 type parser struct {
-	method      int
-	requestURI  int
-	proto       int
-	headerCount int
+	parsedFirstLine bool
+	headerCount     int
 }
 
 func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
@@ -16,7 +14,6 @@ func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
 	for pos < len(buf) && isToken(buf[pos]) {
 		pos++
 	}
-	p.method = pos
 	if pos >= len(buf) {
 		return pos, pos, nil
 	}
@@ -36,7 +33,9 @@ func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
 	for pos < len(buf) && isFieldVChar(buf[pos]) {
 		pos++
 	}
-	p.requestURI = pos
+	if pos >= http.DefaultMaxHeaderBytes-len(" HTTP/0.0\r\n") {
+		return pos, 0, ErrHeaderTooLarge
+	}
 	if adv := pos + len(" HTTP/0.0\r\n"); adv >= len(buf) {
 		return 0, adv, nil
 	}
@@ -56,7 +55,6 @@ func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
 		return pos - len("HTTP/"), 0, ErrUnknownProtocol
 	}
 	pos += len("0.0")
-	p.proto = pos
 	if buf[pos] != '\r' {
 		return pos, 0, ErrExpectedCarriageReturn
 	}
