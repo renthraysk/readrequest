@@ -68,7 +68,7 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	const peekInitial = 8 << 10
 	const peekAdvance = 4 << 10
 
-	buf, err := r.Peek(peekInitial)
+	buf, err := r.Peek(min(http.DefaultMaxHeaderBytes, peekInitial))
 	if len(buf) <= 0 {
 		return nil, coalesce(err, io.ErrUnexpectedEOF)
 	}
@@ -85,7 +85,6 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 			pos, adv, err = p.newline(buf, pos)
 			continue
 		}
-
 		if size > http.DefaultMaxHeaderBytes-pos {
 			return nil, ErrHeaderTooLarge
 		}
@@ -95,7 +94,7 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 		}
 		r.Discard(pos)
 		adv -= pos
-		buf, err = r.Peek(max(adv, peekAdvance))
+		buf, err = r.Peek(max(adv, min(http.DefaultMaxHeaderBytes-size, peekAdvance)))
 		if adv >= len(buf) {
 			return nil, unexpectedEOF(err)
 		}
@@ -104,7 +103,6 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	if err != nil && err != EOH {
 		return nil, err
 	}
-
 	if size > http.DefaultMaxHeaderBytes-pos {
 		return nil, ErrHeaderTooLarge
 	}
@@ -179,7 +177,14 @@ func contentLength(h http.Header) (int64, error) {
 	return -1, nil
 }
 
-func max(a, b int) int {
+func min[T int](a, b T) T {
+	if b < a {
+		a = b
+	}
+	return a
+}
+
+func max[T int](a, b T) T {
 	if a < b {
 		a = b
 	}
