@@ -68,8 +68,6 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	const peekInitial = 8 << 10
 	const peekAdvance = 4 << 10
 
-	p := new(parser)
-
 	buf, err := r.Peek(peekInitial)
 	if len(buf) <= 0 {
 		return nil, coalesce(err, io.ErrUnexpectedEOF)
@@ -77,8 +75,10 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	if !isToken(buf[0]) {
 		return nil, ErrMissingMethod
 	}
-	req := &http.Request{}
 
+	p := new(parser)
+	req := new(http.Request)
+	size := 0
 	pos, adv, err := p.parseMethod(buf, 0)
 	for err == nil {
 		if adv < len(buf) {
@@ -88,6 +88,10 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 		if err = p.Set(req, string(buf[:pos])); err != nil {
 			return nil, err
 		}
+		if size > http.DefaultMaxHeaderBytes-pos {
+			return nil, ErrHeaderTooLarge
+		}
+		size += pos
 		r.Discard(pos)
 		adv -= pos
 		buf, err = r.Peek(max(adv, peekAdvance))
@@ -99,6 +103,11 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	if err != nil && err != EOH {
 		return nil, err
 	}
+
+	if size > http.DefaultMaxHeaderBytes-pos {
+		return nil, ErrHeaderTooLarge
+	}
+	size += pos
 	if err = p.Set(req, string(buf[:pos-len("\r\n")])); err != nil {
 		return nil, err
 	}

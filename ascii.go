@@ -37,13 +37,14 @@ func mask(c byte, lo, hi uint64) uint64 {
 }
 
 func isToken(c byte) bool {
-	if tokens < (1 << 128) {
+	if false && tokens < (1<<128) {
 		switch runtime.GOARCH {
 		case "amd64", "arm64":
 			// 64-bit and conditional movs available...
 			return (1<<(c%64))&mask(c, tokens%(1<<64), tokens>>64) != 0
 		}
 	}
+
 	return tokenSet.Contains(c)
 }
 

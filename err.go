@@ -18,4 +18,5 @@ const (
 	ErrDuplicateHost             = ErrorString("duplicate Host header")
 	ErrInconsistentContentLength = ErrorString("inconsistent Content-Length header")
 	EOH                          = ErrorString("end of header")
+	ErrHeaderTooLarge            = ErrorString("header too large")
 )
