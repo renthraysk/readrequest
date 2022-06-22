@@ -7,7 +7,7 @@ type parser struct {
 	headerCount int
 }
 
-func (p *parser) parseMethod(buf []byte, pos int) (int, int, error) {
+func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
 	if pos >= len(buf) {
 		return pos, pos, nil
 	}

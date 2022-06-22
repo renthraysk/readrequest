@@ -79,7 +79,7 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	p := new(parser)
 	req := new(http.Request)
 	size := 0
-	pos, adv, err := p.parseMethod(buf, 0)
+	pos, adv, err := p.parseFirstLine(buf, 0)
 	for err == nil {
 		if adv < len(buf) {
 			pos, adv, err = p.newline(buf, pos)
