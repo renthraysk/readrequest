@@ -1,5 +1,7 @@
 package main
 
+import "net/http"
+
 type parser struct {
 	method      int
 	requestURI  int
@@ -15,7 +17,13 @@ func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
 		pos++
 	}
 	p.method = pos
-	if adv := pos + len(" / HTTP/0.0\r\n"); pos >= len(buf) || adv >= len(buf) {
+	if pos >= len(buf) {
+		return pos, pos, nil
+	}
+	if pos >= http.DefaultMaxHeaderBytes-len(" / HTTP/0.0\r\n") {
+		return pos, 0, ErrHeaderTooLarge
+	}
+	if adv := pos + len(" / HTTP/0.0\r\n"); adv >= len(buf) {
 		return pos, adv, nil
 	}
 	if buf[pos] != ' ' {
