@@ -16,12 +16,24 @@ func (p *parser) Set(r *http.Request, lines string) error {
 		var err error
 
 		method := strings.IndexByte(lines, ' ')
-		requestURI := method + 1 + strings.IndexByte(lines[method+1:], ' ')
-		pos = requestURI + 1 + strings.IndexByte(lines[requestURI+1:], '\r')
-
+		if method < 0 {
+			return ErrExpectedSpace
+		}
 		r.Method = lines[:method]
-		r.RequestURI = lines[method+1 : requestURI]
-		r.Proto = lines[requestURI+1 : pos]
+		method++
+		requestURI := strings.IndexByte(lines[method:], ' ')
+		if requestURI < 0 {
+			return ErrExpectedSpace
+		}
+		requestURI += method
+		r.RequestURI = lines[method:requestURI]
+		requestURI++
+		pos = strings.IndexByte(lines[requestURI:], '\r')
+		if pos < 0 {
+			return ErrExpectedCarriageReturn
+		}
+		pos += requestURI
+		r.Proto = lines[requestURI:pos]
 		r.URL, err = url.Parse(r.RequestURI)
 		if err != nil {
 			return err
@@ -42,8 +54,16 @@ func (p *parser) Set(r *http.Request, lines string) error {
 	}
 	values := make([]string, index)
 	for pos < len(lines) {
-		i := pos + strings.IndexByte(lines[pos:], ':')
-		j := i + strings.IndexByte(lines[i:], '\r')
+		i := strings.IndexByte(lines[pos:], ':')
+		if i < 0 {
+			return ErrExpectedColon
+		}
+		i += pos
+		j := strings.IndexByte(lines[i:], '\r')
+		if j < 0 {
+			return ErrExpectedCarriageReturn
+		}
+		j += i
 		key, value := lines[pos:i], trim(lines[i+1:j])
 		pos = j + len("\r\n")
 		if v, ok := r.Header[key]; ok {
@@ -67,10 +87,14 @@ func (p *parser) Set(r *http.Request, lines string) error {
 }
 
 func ReadRequest(r *bufio.Reader) (*http.Request, error) {
+	return readRequest(r, http.DefaultMaxHeaderBytes)
+}
+
+func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 	const peekInitial = 8 << 10
 	const peekAdvance = 4 << 10
 
-	buf, err := r.Peek(min(http.DefaultMaxHeaderBytes, peekInitial))
+	buf, err := r.Peek(min(maxHeaderBytes, peekInitial))
 	if len(buf) <= 0 {
 		return nil, coalesce(err, io.ErrUnexpectedEOF)
 	}
@@ -79,36 +103,37 @@ func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	}
 
 	p := new(parser)
+	p.maxLeft = maxHeaderBytes
 	req := new(http.Request)
-	size := 0
 	pos, adv, err := p.parseFirstLine(buf, 0)
 	for err == nil {
 		if adv < len(buf) {
 			pos, adv, err = p.newline(buf, pos)
 			continue
 		}
-		if size > http.DefaultMaxHeaderBytes-pos {
+		if p.maxLeft < pos {
 			return nil, ErrHeaderTooLarge
 		}
-		size += pos
+		p.maxLeft -= pos
 		if err = p.Set(req, string(buf[:pos])); err != nil {
 			return nil, err
 		}
 		r.Discard(pos)
 		adv -= pos
-		buf, err = r.Peek(max(adv, min(http.DefaultMaxHeaderBytes-size, peekAdvance)))
+		buf, err = r.Peek(max(adv, min(p.maxLeft, peekAdvance)))
 		if adv >= len(buf) {
 			return nil, unexpectedEOF(err)
 		}
+
 		pos, adv, err = p.newline(buf, 0)
 	}
 	if err != nil && err != EOH {
 		return nil, err
 	}
-	if size > http.DefaultMaxHeaderBytes-pos {
+	if p.maxLeft < pos {
 		return nil, ErrHeaderTooLarge
 	}
-	size += pos
+	p.maxLeft -= pos
 	if err = p.Set(req, string(buf[:pos-len("\r\n")])); err != nil {
 		return nil, err
 	}
