@@ -73,7 +73,7 @@ func TestDuplicateHosts(t *testing.T) {
 	}
 }
 
-func TestContentLength(t *testing.T) {
+func TestMultipleContentLength(t *testing.T) {
 	cases := []struct {
 		in  string
 		err error
@@ -156,7 +156,7 @@ func BenchmarkReadRequest(b *testing.B) {
 	}
 }
 
-func XBenchmarkReadRequest(b *testing.B) {
+func BenchmarkStdlibReadRequest(b *testing.B) {
 	r0 := strings.NewReader(quickTest)
 	r1 := bufio.NewReader(r0)
 

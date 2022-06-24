@@ -102,8 +102,9 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 		return nil, ErrMissingMethod
 	}
 
-	p := new(parser)
-	p.maxLeft = maxHeaderBytes
+	p := &parser{
+		remaining: maxHeaderBytes,
+	}
 	req := new(http.Request)
 	pos, adv, err := p.parseFirstLine(buf, 0)
 	for err == nil {
@@ -111,16 +112,16 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 			pos, adv, err = p.newline(buf, pos)
 			continue
 		}
-		if p.maxLeft < pos {
+		if p.remaining < pos {
 			return nil, ErrHeaderTooLarge
 		}
-		p.maxLeft -= pos
+		p.remaining -= pos
 		if err = p.Set(req, string(buf[:pos])); err != nil {
 			return nil, err
 		}
 		r.Discard(pos)
 		adv -= pos
-		buf, err = r.Peek(max(adv, min(p.maxLeft, peekAdvance)))
+		buf, err = r.Peek(max(adv, min(p.remaining, peekAdvance)))
 		if adv >= len(buf) {
 			return nil, unexpectedEOF(err)
 		}
@@ -130,10 +131,10 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 	if err != nil && err != EOH {
 		return nil, err
 	}
-	if p.maxLeft < pos {
+	if pos > p.remaining {
 		return nil, ErrHeaderTooLarge
 	}
-	p.maxLeft -= pos
+	p.remaining -= pos
 	if err = p.Set(req, string(buf[:pos-len("\r\n")])); err != nil {
 		return nil, err
 	}
@@ -205,17 +206,17 @@ func contentLength(h http.Header) (int64, error) {
 }
 
 func min[T int](a, b T) T {
-	if b < a {
-		a = b
+	if a <= b {
+		return a
 	}
-	return a
+	return b
 }
 
 func max[T int](a, b T) T {
-	if a < b {
-		a = b
+	if a >= b {
+		return a
 	}
-	return a
+	return b
 }
 
 func coalesce(a, b error) error {

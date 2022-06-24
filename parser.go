@@ -3,7 +3,7 @@ package main
 type parser struct {
 	parsedFirstLine bool
 	headerCount     int
-	maxLeft         int
+	remaining       int
 }
 
 func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
@@ -16,7 +16,7 @@ func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
 	if pos >= len(buf) {
 		return pos, pos, nil
 	}
-	if pos >= p.maxLeft-len(" / HTTP/0.0\r\n") {
+	if pos >= p.remaining-len(" / HTTP/0.0\r\n") {
 		return pos, 0, ErrHeaderTooLarge
 	}
 	if adv := pos + len(" / HTTP/0.0\r\n"); adv >= len(buf) {
@@ -29,10 +29,11 @@ func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
 	if !isFieldVChar(buf[pos]) {
 		return pos, 0, ErrMissingRequestURI
 	}
+	pos++
 	for pos < len(buf) && isFieldVChar(buf[pos]) {
 		pos++
 	}
-	if pos >= p.maxLeft-len(" HTTP/0.0\r\n") {
+	if pos >= p.remaining-len(" HTTP/0.0\r\n") {
 		return pos, 0, ErrHeaderTooLarge
 	}
 	if adv := pos + len(" HTTP/0.0\r\n"); adv >= len(buf) {
