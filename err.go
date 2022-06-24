@@ -19,4 +19,5 @@ const (
 	ErrInconsistentContentLength = ErrorString("inconsistent Content-Length header")
 	EOH                          = ErrorString("end of header")
 	ErrHeaderTooLarge            = ErrorString("header too large")
+	ErrMaxHeaderBytesTooSmall    = ErrorString("max header bytes too small")
 )
