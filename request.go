@@ -94,7 +94,7 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 	const peekInitial = 8 << 10
 	const peekAdvance = 4 << 10
 
-	if maxHeaderBytes < len("M / HTTP0.0/r/n") {
+	if maxHeaderBytes < len("M / HTTP0.0/r/n/r/n") {
 		return nil, ErrMaxHeaderBytesTooSmall
 	}
 
