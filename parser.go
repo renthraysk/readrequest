@@ -77,7 +77,7 @@ func (p *parser) newline(buf []byte, pos int) (int, int, error) {
 			}
 			// Colon
 			if buf[pos] != ':' {
-				return 0, 0, ErrExpectedColon
+				return pos, 0, ErrExpectedColon
 			}
 			key := buf[lineStart:pos]
 			pos = skipOptionalSpace(buf, pos+1)
