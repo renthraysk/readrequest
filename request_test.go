@@ -86,7 +86,7 @@ func TestMultipleContentLength(t *testing.T) {
 		rdr := bufio.NewReader(strings.NewReader(s.in))
 		r, err := ReadRequest(rdr)
 		if err != s.err {
-			t.Fatalf("expected error %q, got %q", s.err, err)
+			t.Errorf("expected error %q, got %q", s.err, err)
 		}
 		if s.err == nil {
 			assertEqual(t, "Content-Length", r.ContentLength, 7)
@@ -117,7 +117,7 @@ func TestConnection(t *testing.T) {
 			rdr := bufio.NewReader(strings.NewReader(s.in))
 			r, err := ReadRequest(rdr)
 			if err != nil {
-				t.Fatalf("unexpected error %q", err)
+				t.Errorf("unexpected error %q", err)
 			}
 			assertEqual(t, "Close", r.Close, s.close)
 		})

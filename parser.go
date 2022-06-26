@@ -6,10 +6,8 @@ type parser struct {
 	remaining       int
 }
 
-func (p *parser) parseFirstLine(buf []byte, pos int) (int, int, error) {
-	if pos >= len(buf) {
-		return pos, pos, nil
-	}
+func (p *parser) parseFirstLine(buf []byte) (int, int, error) {
+	pos := 0
 	for pos < len(buf) && isToken(buf[pos]) {
 		pos++
 	}

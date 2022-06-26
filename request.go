@@ -110,13 +110,18 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 		remaining: maxHeaderBytes,
 	}
 	req := new(http.Request)
-	pos, adv, err := p.parseFirstLine(buf, 0)
-	for err == nil {
-		if adv < len(buf) {
-			pos, adv, err = p.newline(buf, pos)
-			continue
+
+	pos, adv, err := p.parseFirstLine(buf)
+	for err == nil && adv > len(buf) {
+		buf, err = r.Peek(adv)
+		if adv >= len(buf) {
+			return nil, unexpectedEOF(err)
 		}
-		if p.remaining < pos {
+		pos, adv, err = p.parseFirstLine(buf)
+	}
+	pos, adv, err = p.newline(buf, pos)
+	for err == nil && adv > len(buf) {
+		if pos > p.remaining {
 			return nil, ErrHeaderTooLarge
 		}
 		p.remaining -= pos
@@ -129,7 +134,6 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 		if adv >= len(buf) {
 			return nil, unexpectedEOF(err)
 		}
-
 		pos, adv, err = p.newline(buf, 0)
 	}
 	if err != nil && err != EOH {
