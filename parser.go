@@ -64,7 +64,7 @@ func (p *parser) parseFirstLine(buf []byte) (int, int, error) {
 	return pos, pos, nil
 }
 
-func (p *parser) newline(buf []byte, pos int) (int, int, error) {
+func (p *parser) parseLines(buf []byte, pos int) (int, int, error) {
 	for pos < len(buf) {
 		lineStart := pos
 		switch {
