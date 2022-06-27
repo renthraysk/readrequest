@@ -1,6 +1,9 @@
 package main
 
-import "runtime"
+import (
+	"runtime"
+	"strings"
+)
 
 type set256 [256 / 32]uint32
 
@@ -85,4 +88,12 @@ func trim(s string) string {
 		n--
 	}
 	return s[i:n]
+}
+
+func cut(s string, c byte) (string, string, bool) {
+	i := strings.IndexByte(s, c)
+	if i < 0 {
+		return s, "", false
+	}
+	return s[:i], s[i+1:], true
 }

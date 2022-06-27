@@ -7,84 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 )
-
-func (p *parser) Set(r *http.Request, lines string) error {
-	pos := 0
-	if !p.parsedFirstLine {
-		var err error
-
-		method := strings.IndexByte(lines, ' ')
-		if method < 0 {
-			return ErrExpectedSpace
-		}
-		r.Method = lines[:method]
-		method++
-		requestURI := strings.IndexByte(lines[method:], ' ')
-		if requestURI < 0 {
-			return ErrExpectedSpace
-		}
-		requestURI += method
-		r.RequestURI = lines[method:requestURI]
-		requestURI++
-		pos = strings.IndexByte(lines[requestURI:], '\r')
-		if pos < 0 {
-			return ErrExpectedCarriageReturn
-		}
-		pos += requestURI
-		r.Proto = lines[requestURI:pos]
-		r.URL, err = url.Parse(r.RequestURI)
-		if err != nil {
-			return err
-		}
-		r.ProtoMajor = int(r.Proto[len("HTTP/")] - '0')
-		r.ProtoMinor = int(r.Proto[len("HTTP/0.")] - '0')
-		p.parsedFirstLine = true
-		pos += len("\r\n")
-	}
-
-	index := p.headerCount
-	p.headerCount = 0
-	if r.Header == nil {
-		r.Header = make(http.Header, index)
-	}
-	if index == 0 {
-		return nil
-	}
-	values := make([]string, index)
-	for pos < len(lines) {
-		i := strings.IndexByte(lines[pos:], ':')
-		if i < 0 {
-			return ErrExpectedColon
-		}
-		i += pos
-		j := strings.IndexByte(lines[i:], '\r')
-		if j < 0 {
-			return ErrExpectedCarriageReturn
-		}
-		j += i
-		key, value := lines[pos:i], trim(lines[i+1:j])
-		pos = j + len("\r\n")
-		if v, ok := r.Header[key]; ok {
-			switch key {
-			case "Host":
-				return ErrDuplicateHost
-			case "Content-Length":
-				if len(v) > 0 && v[0] != value {
-					return ErrInconsistentContentLength
-				}
-			default:
-				r.Header[key] = append(v, value)
-			}
-		} else {
-			index--
-			values[index] = value
-			r.Header[key] = values[index : index+1 : index+1]
-		}
-	}
-	return nil
-}
 
 func ReadRequest(r *bufio.Reader) (*http.Request, error) {
 	return readRequest(r, http.DefaultMaxHeaderBytes)
@@ -97,7 +20,6 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 	if maxHeaderBytes < len("M / HTTP0.0/r/n/r/n") {
 		return nil, ErrMaxHeaderBytesTooSmall
 	}
-
 	buf, err := r.Peek(min(maxHeaderBytes, peekInitial))
 	if len(buf) <= 0 {
 		return nil, coalesce(err, io.ErrUnexpectedEOF)
@@ -106,46 +28,51 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 		return nil, ErrMissingMethod
 	}
 
-	p := &parser{
-		remaining: maxHeaderBytes,
-	}
-	pos, adv, err := p.parseFirstLine(buf)
+	pos, adv, err := parseFirstLine(buf)
 	for err == nil && adv >= len(buf) {
+		if adv > maxHeaderBytes {
+			return nil, ErrHeaderTooLarge
+		}
 		buf, err = r.Peek(adv)
 		if adv >= len(buf) {
 			return nil, unexpectedEOF(err)
 		}
-		pos, adv, err = p.parseFirstLine(buf)
+		pos, adv, err = parseFirstLine(buf)
 	}
 	if err != nil {
 		return nil, err
 	}
-	req := new(http.Request)
-	pos, adv, err = p.parseLines(buf, pos)
+
+	var req *http.Request
+	var headerCount int
+
+	remaining := maxHeaderBytes
+	pos, adv, headerCount, err = parseBlock(buf, pos)
 	for err == nil && adv >= len(buf) {
-		if pos > p.remaining {
+		if pos > remaining {
 			return nil, ErrHeaderTooLarge
 		}
-		p.remaining -= pos
-		if err = p.Set(req, string(buf[:pos])); err != nil {
+		remaining -= pos
+		if req, err = buildRequest(req, string(buf[:pos]), headerCount); err != nil {
 			return nil, err
 		}
 		r.Discard(pos)
 		adv -= pos
-		buf, err = r.Peek(max(adv, min(p.remaining, peekAdvance)))
+		buf, err = r.Peek(max(adv, min(remaining, peekAdvance)))
 		if adv >= len(buf) {
 			return nil, unexpectedEOF(err)
 		}
-		pos, adv, err = p.parseLines(buf, 0)
+		pos, adv, headerCount, err = parseBlock(buf, 0)
 	}
 	if err != nil && err != EOH {
 		return nil, err
 	}
-	if pos > p.remaining {
+	if pos > remaining {
 		return nil, ErrHeaderTooLarge
 	}
-	p.remaining -= pos
-	if err = p.Set(req, string(buf[:pos-len("\r\n")])); err != nil {
+	remaining -= pos
+
+	if req, err = buildRequest(req, string(buf[:pos-len("\r\n")]), headerCount); err != nil {
 		return nil, err
 	}
 	r.Discard(pos)
@@ -227,18 +154,4 @@ func max[T int](a, b T) T {
 		return a
 	}
 	return b
-}
-
-func coalesce(a, b error) error {
-	if a != nil {
-		return a
-	}
-	return b
-}
-
-func unexpectedEOF(err error) error {
-	if err == nil || err == io.EOF {
-		return io.ErrUnexpectedEOF
-	}
-	return err
 }
