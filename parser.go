@@ -94,9 +94,6 @@ func parseBlock(buf []byte, pos int) (_ int, adv int, headerCount int, err error
 					pos++
 				}
 			}
-			if pos >= len(buf) {
-				return lineStart, pos, headerCount, nil
-			}
 			pos = skipOptionalSpace(buf, pos)
 			if pos >= len(buf) {
 				return lineStart, pos, headerCount, nil
