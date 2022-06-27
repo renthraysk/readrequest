@@ -36,6 +36,9 @@ func buildRequest(r *http.Request, lines string, headerCount int) (*http.Request
 		lines = lines[len("\n"):]
 	}
 
+	if headerCount <= 0 {
+		return r, nil
+	}
 	if r.Header == nil {
 		r.Header = make(http.Header, headerCount)
 	}
