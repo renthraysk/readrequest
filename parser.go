@@ -3,6 +3,10 @@ package main
 import "math"
 
 func parseFirstLine(buf []byte) (pos int, adv int, err error) {
+	if !isToken(buf[0]) {
+		return 0, 0, ErrMissingMethod
+	}
+	pos = 1
 	for pos < len(buf) && isToken(buf[pos]) {
 		pos++
 	}

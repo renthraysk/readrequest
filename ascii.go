@@ -5,50 +5,33 @@ import (
 	"strings"
 )
 
-type set256 [256 / 32]uint32
-
-func (s *set256) Contains(c byte) bool { return (1<<(c%32))&s[c/32] != 0 }
-
-const (
-	upper  = ((1 << 26) - 1) << 'A'
-	lower  = ((1 << 26) - 1) << 'a'
-	digits = ((1 << 10) - 1) << '0'
-	tokens = upper | lower | digits |
-		1<<'!' | 1<<'#' | 1<<'$' | 1<<'%' | 1<<'&' | 1<<'\'' | 1<<'*' | 1<<'+' |
-		1<<'-' | 1<<'.' | 1<<'^' | 1<<'_' | 1<<'`' | 1<<'|' | 1<<'~'
-)
-
-var tokenSet = set256{
-	(tokens >> (0 * 32)) % (1 << 32),
-	(tokens >> (1 * 32)) % (1 << 32),
-	(tokens >> (2 * 32)) % (1 << 32),
-	(tokens >> (3 * 32)) % (1 << 32),
-	(tokens >> (4 * 32)) % (1 << 32),
-	(tokens >> (5 * 32)) % (1 << 32),
-	(tokens >> (6 * 32)) % (1 << 32),
-	(tokens >> (7 * 32)) % (1 << 32),
-}
-
-func mask(c byte, lo, hi uint64) uint64 {
-	if c >= 64 {
-		lo = hi
-		if hi != 0 && c >= 128 {
-			lo = 0
+func isIn(c byte, lo, hi uint64) bool {
+	switch runtime.GOARCH {
+	case "amd64", "arm64", "arm64be", "ppc64", "ppc64le":
+		// 64 bit and conditional moves available...
+		mask := lo
+		if c >= 64 {
+			mask = hi
+			if c >= 128 {
+				mask = 0
+			}
 		}
+		return 1<<(c%64)&mask != 0
 	}
-	return lo
+	return (1<<c&lo)|(1<<(c-64)&hi) != 0
 }
 
 func isToken(c byte) bool {
-	if false && tokens < (1<<128) {
-		switch runtime.GOARCH {
-		case "amd64", "arm64":
-			// 64-bit and conditional movs available...
-			return (1<<(c%64))&mask(c, tokens%(1<<64), tokens>>64) != 0
-		}
-	}
+	const (
+		upper  = ((1 << 26) - 1) << 'A'
+		lower  = ((1 << 26) - 1) << 'a'
+		digits = ((1 << 10) - 1) << '0'
+		tokens = upper | lower | digits |
+			1<<'!' | 1<<'#' | 1<<'$' | 1<<'%' | 1<<'&' | 1<<'\'' | 1<<'*' | 1<<'+' |
+			1<<'-' | 1<<'.' | 1<<'^' | 1<<'_' | 1<<'`' | 1<<'|' | 1<<'~'
+	)
 
-	return tokenSet.Contains(c)
+	return isIn(c, tokens%(1<<64), tokens>>64)
 }
 
 func isLower(c byte) bool           { return c-'a' <= 'z'-'a' }
@@ -61,7 +44,7 @@ func key(buf []byte, pos int) int {
 	for nextA := 'a'; pos < len(buf) && isToken(buf[pos]); pos++ {
 		c := buf[pos]
 		if c-byte(nextA) < 26 {
-			buf[pos] ^= 0x20 // buf[pos] wrong case, toggle
+			buf[pos] = c ^ 0x20 // buf[pos] wrong case, toggle
 		}
 		nextA = 'A'
 		if c == '-' {

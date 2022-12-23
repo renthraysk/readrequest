@@ -24,9 +24,6 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 	if len(buf) <= 0 {
 		return nil, coalesce(err, io.ErrUnexpectedEOF)
 	}
-	if !isToken(buf[0]) {
-		return nil, ErrMissingMethod
-	}
 
 	pos, adv, err := parseFirstLine(buf)
 	for err == nil && adv >= len(buf) {
@@ -42,11 +39,14 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+	if pos > maxHeaderBytes {
+		return nil, ErrHeaderTooLarge
+	}
 
 	var req *http.Request
 	var headerCount int
 
-	remaining := maxHeaderBytes
+	remaining := maxHeaderBytes - pos
 	pos, adv, headerCount, err = parseBlock(buf, pos)
 	for err == nil && adv >= len(buf) {
 		if pos > remaining {
@@ -84,14 +84,13 @@ func readRequest(r *bufio.Reader, maxHeaderBytes int) (*http.Request, error) {
 	pragmaCacheControl(req.Header)
 
 	req.Host = host(req.URL, req.Header)
-	delete(req.Header, "Host")
-
 	req.Close = close(req.ProtoMajor, req.ProtoMinor, req.Header)
 
 	return req, nil
 }
 
 func host(u *url.URL, h http.Header) string {
+	defer delete(h, "Host")
 	if u != nil && u.Host != "" {
 		return u.Host
 	}
